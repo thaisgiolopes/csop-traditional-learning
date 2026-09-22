@@ -1,38 +1,13 @@
 from pathlib import Path
 from .graph import Graph
 
+
 class GraphLoader:
     """
-    Loads graph instances from the project's file-based representation.
+    Loads graph instances from files.
 
-    Each graph instance is stored in a directory containing two files:
-
-        metadata
-        adjlist
-
-    The metadata file contains the number of vertices and the number of
-    edges in its first line, separated by a whitespace character.
-
-    The adjacency-list file contains one line for each vertex. The line
-    number corresponds to the vertex identifier, starting from vertex 0.
-
-    Each adjacency entry has the following format:
-
-        vertex_id,edge_id
-
-    Multiple adjacency entries in the same line are separated by spaces.
-
-    Example:
-
-        3,10 5,12 8,15
-
-    means that the vertex corresponding to that line is connected to
-    vertices 3, 5, and 8 through edges 10, 12, and 15, respectively.
-
-    The loader is responsible only for translating the file representation
-    into a Graph object. It must not perform feature extraction, objective
-    function calculations, machine learning operations, or optimization
-    logic.
+    Each instance contains a metadata file and an adjacency-list file.
+    The loader converts this representation into a Graph object.
     """
 
     METADATA_FILENAME = "metadata"
@@ -40,15 +15,14 @@ class GraphLoader:
 
     def __init__(self, instance_path):
         """
-        Initialize a graph loader for a specific graph instance.
+        Initialize a loader for a graph instance.
 
         Args:
-            instance_path: Path to the directory containing the graph
-                instance files.
+            instance_path: Path to the graph instance directory.
 
         Raises:
-            FileNotFoundError: If the instance directory does not exist.
-            NotADirectoryError: If instance_path is not a directory.
+            FileNotFoundError: If the directory does not exist.
+            NotADirectoryError: If the path is not a directory.
         """
         self.instance_path = Path(instance_path)
 
@@ -60,22 +34,14 @@ class GraphLoader:
 
     def load(self):
         """
-        Load the graph instance and return a Graph object.
-
-        The method reads the metadata and adjacency-list files, validates
-        their consistency, and constructs the corresponding Graph.
-
-        In an undirected graph, each edge is expected to appear in the
-        adjacency lists of both endpoints using the same edge identifier.
+        Load the graph instance.
 
         Returns:
             Graph: The graph represented by the instance files.
 
         Raises:
-            FileNotFoundError: If the metadata or adjacency-list file
-                does not exist.
-            ValueError: If the instance contains invalid or inconsistent
-                data.
+            FileNotFoundError: If a required file does not exist.
+            ValueError: If the instance data is invalid or inconsistent.
         """
         num_vertices, num_edges = self._read_metadata()
         adjacency = self._read_adjacency_list(num_vertices)
@@ -123,16 +89,10 @@ class GraphLoader:
 
     def _read_metadata(self):
         """
-        Read the graph metadata from the metadata file.
-
-        The first line of the metadata file must contain two values
-        separated by whitespace:
-
-            number_of_vertices number_of_edges
+        Read the number of vertices and edges from the metadata file.
 
         Returns:
-            tuple[int, int]: A tuple containing the number of vertices
-                and the number of edges.
+            tuple[int, int]: The number of vertices and edges.
 
         Raises:
             FileNotFoundError: If the metadata file does not exist.
@@ -166,28 +126,17 @@ class GraphLoader:
 
     def _read_adjacency_list(self, num_vertices):
         """
-        Read the adjacency-list file.
-
-        Each line corresponds to one vertex. The first line corresponds
-        to vertex 0, the second line to vertex 1, and so on.
-
-        Each adjacency entry must have the format:
-
-            vertex_id,edge_id
-
-        Multiple entries on the same line are separated by spaces.
+        Read the adjacency list from the instance file.
 
         Args:
-            num_vertices: Expected number of vertices according to the
-                metadata file.
+            num_vertices: Expected number of vertices.
 
         Returns:
-            list: A collection containing the parsed adjacency information.
+            list: The parsed adjacency information.
 
         Raises:
             FileNotFoundError: If the adjacency-list file does not exist.
-            ValueError: If the number of lines or an adjacency entry is
-                invalid.
+            ValueError: If the file format or number of lines is invalid.
         """
         adjacency_path = self.instance_path / self.ADJLIST_FILENAME
 
@@ -229,24 +178,16 @@ class GraphLoader:
 
     def _parse_adjacency_entry(self, entry):
         """
-        Parse a single adjacency-list entry.
-
-        An entry must have the following format:
-
-            vertex_id,edge_id
-
-        There must be exactly one comma separating the vertex identifier
-        from the edge identifier.
+        Parse an adjacency-list entry.
 
         Args:
-            entry: A string representing one adjacency-list entry.
+            entry: Entry in the format ``vertex_id,edge_id``.
 
         Returns:
-            tuple[int, int]: A tuple containing the adjacent vertex
-                identifier and the edge identifier.
+            tuple[int, int]: The adjacent vertex and edge identifiers.
 
         Raises:
-            ValueError: If the entry does not follow the expected format.
+            ValueError: If the entry format or identifiers are invalid.
         """
         if not isinstance(entry, str):
             raise ValueError("Adjacency entry must be a string.")
@@ -273,4 +214,3 @@ class GraphLoader:
             raise ValueError(f"Adjacency entry identifiers must be non-negative: {entry}")
 
         return vertex_id, edge_id
-        

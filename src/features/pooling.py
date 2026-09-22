@@ -1,26 +1,19 @@
 from abc import ABC, abstractmethod
-
+import numpy as np
 
 class Pooling(ABC):
     """
     Abstract base class for graph-level pooling strategies.
 
-    A pooling strategy transforms vertex-level feature values into a
-    fixed-size representation describing the graph as a whole.
-
-    Pooling operates on the output of local feature extractors and must
-    remain independent from the Graph class, machine learning models,
-    objective functions, and optimization algorithms.
-
-    Different pooling strategies can be implemented independently and
-    combined later to construct graph-level feature vectors.
+    Pooling aggregates vertex-level feature values into a single
+    graph-level value.
     """
 
     @property
     @abstractmethod
     def name(self):
         """
-        Return the name that identifies the pooling strategy.
+        Return the pooling strategy name.
 
         Returns:
             str: The pooling strategy name.
@@ -32,18 +25,17 @@ class Pooling(ABC):
     @abstractmethod
     def compute(self, values):
         """
-        Aggregate vertex-level feature values into a graph-level value.
+        Aggregate vertex-level feature values.
 
         Args:
-            values: A mapping from vertex identifiers to numerical
-                feature values.
+            values: A mapping from vertex identifiers to feature values.
 
         Returns:
-            float: The aggregated graph-level value.
+            float: The aggregated value.
 
         Raises:
             TypeError: If values is not a dictionary.
-            ValueError: If the mapping is empty.
+            ValueError: If values is empty.
         """
         raise NotImplementedError(
             "Subclasses must implement pooling computation."
@@ -51,15 +43,14 @@ class Pooling(ABC):
 
     def _validate(self, values):
         """
-        Validate the input values before pooling.
+        Validate the pooling input.
 
         Args:
-            values: A mapping from vertex identifiers to numerical
-                feature values.
+            values: A mapping from vertex identifiers to feature values.
 
         Raises:
             TypeError: If values is not a dictionary.
-            ValueError: If the mapping is empty.
+            ValueError: If values is empty.
         """
         if not isinstance(values, dict):
             raise TypeError("values must be a dictionary.")
@@ -69,14 +60,12 @@ class Pooling(ABC):
 
 
 class MeanPooling(Pooling):
-    """
-    Computes the arithmetic mean of vertex-level feature values.
-    """
+    """Computes the mean of vertex-level feature values."""
 
     @property
     def name(self):
         """
-        Return the identifier of the pooling strategy.
+        Return the pooling strategy name.
 
         Returns:
             str: The pooling strategy name.
@@ -85,28 +74,25 @@ class MeanPooling(Pooling):
 
     def compute(self, values):
         """
-        Compute the arithmetic mean of the feature values.
+        Compute the mean of the feature values.
 
         Args:
-            values: A mapping from vertex identifiers to numerical
-                feature values.
+            values: A mapping from vertex identifiers to feature values.
 
         Returns:
-            float: The mean of the feature values.
+            float: The mean value.
         """
         self._validate(values)
         return sum(values.values()) / len(values)
 
 
 class MaxPooling(Pooling):
-    """
-    Computes the maximum value among all vertex-level feature values.
-    """
+    """Computes the maximum of vertex-level feature values."""
 
     @property
     def name(self):
         """
-        Return the identifier of the pooling strategy.
+        Return the pooling strategy name.
 
         Returns:
             str: The pooling strategy name.
@@ -118,25 +104,22 @@ class MaxPooling(Pooling):
         Compute the maximum feature value.
 
         Args:
-            values: A mapping from vertex identifiers to numerical
-                feature values.
+            values: A mapping from vertex identifiers to feature values.
 
         Returns:
-            float: The maximum feature value.
+            float: The maximum value.
         """
         self._validate(values)
         return max(values.values())
 
 
 class MinPooling(Pooling):
-    """
-    Computes the minimum value among all vertex-level feature values.
-    """
+    """Computes the minimum of vertex-level feature values."""
 
     @property
     def name(self):
         """
-        Return the identifier of the pooling strategy.
+        Return the pooling strategy name.
 
         Returns:
             str: The pooling strategy name.
@@ -148,26 +131,22 @@ class MinPooling(Pooling):
         Compute the minimum feature value.
 
         Args:
-            values: A mapping from vertex identifiers to numerical
-                feature values.
+            values: A mapping from vertex identifiers to feature values.
 
         Returns:
-            float: The minimum feature value.
+            float: The minimum value.
         """
         self._validate(values)
         return min(values.values())
 
 
 class StdPooling(Pooling):
-    """
-    Computes the population standard deviation of vertex-level
-    feature values.
-    """
+    """Computes the population standard deviation of vertex-level feature values."""
 
     @property
     def name(self):
         """
-        Return the identifier of the pooling strategy.
+        Return the pooling strategy name.
 
         Returns:
             str: The pooling strategy name.
@@ -178,19 +157,11 @@ class StdPooling(Pooling):
         """
         Compute the population standard deviation of the feature values.
 
-        The population standard deviation must be used because the
-        values represent all vertices of the given graph rather than
-        a statistical sample.
-
         Args:
-            values: A mapping from vertex identifiers to numerical
-                feature values.
+            values: A mapping from vertex identifiers to feature values.
 
         Returns:
             float: The population standard deviation.
         """
         self._validate(values)
-        values_list = list(values.values())
-        mean_value = sum(values_list) / len(values_list)
-        variance = sum((value - mean_value) ** 2 for value in values_list) / len(values_list)
-        return variance ** 0.5
+        return float(np.std(list(values.values()), ddof=0))
