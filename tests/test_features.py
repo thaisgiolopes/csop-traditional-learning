@@ -1,12 +1,17 @@
 import pytest
 
 from src.graph import Graph
-from src.features.base import Feature
-from src.features.global_features import (
+from src.features.base import (
+    Feature,
+    FeatureContext,
+    FeatureLevel,
+    FeatureScope,
+)
+from src.features.graph_features import (
     NumEdgesFeature,
     NumVerticesFeature,
 )
-from src.features.local_features import DegreeFeature
+from src.features.node_features import DegreeFeature
 
 
 def create_test_graph():
@@ -34,6 +39,17 @@ def create_test_graph():
     return Graph(vertices, edges)
 
 
+def create_test_context():
+    """Create a context with distinct complete and candidate graphs."""
+    full_graph = create_test_graph()
+    subgraph = Graph(
+        vertices={0, 1, 2},
+        edges=[(0, 1), (0, 2)],
+    )
+
+    return FeatureContext(full_graph, subgraph)
+
+
 def test_feature_is_abstract():
     """Test that the Feature class cannot be instantiated directly."""
     with pytest.raises(TypeError):
@@ -45,14 +61,16 @@ def test_num_vertices_feature_name():
     feature = NumVerticesFeature()
 
     assert feature.name == "num_vertices"
+    assert feature.scope is FeatureScope.GLOBAL
+    assert feature.level is FeatureLevel.GRAPH
 
 
 def test_num_vertices_feature_compute():
     """Test that the number-of-vertices feature returns the correct value."""
-    graph = create_test_graph()
+    context = create_test_context()
     feature = NumVerticesFeature()
 
-    result = feature.compute(graph)
+    result = feature.compute(context)
 
     assert result == 4
 
@@ -62,14 +80,16 @@ def test_num_edges_feature_name():
     feature = NumEdgesFeature()
 
     assert feature.name == "num_edges"
+    assert feature.scope is FeatureScope.GLOBAL
+    assert feature.level is FeatureLevel.GRAPH
 
 
 def test_num_edges_feature_compute():
     """Test that the number-of-edges feature returns the correct value."""
-    graph = create_test_graph()
+    context = create_test_context()
     feature = NumEdgesFeature()
 
-    result = feature.compute(graph)
+    result = feature.compute(context)
 
     assert result == 4
 
@@ -79,38 +99,58 @@ def test_degree_feature_name():
     feature = DegreeFeature()
 
     assert feature.name == "degree"
+    assert feature.scope is FeatureScope.LOCAL
+    assert feature.level is FeatureLevel.NODE
 
 
 def test_degree_feature_compute():
     """Test that the degree feature returns the correct degree for every vertex."""
-    graph = create_test_graph()
+    context = create_test_context()
     feature = DegreeFeature()
 
-    result = feature.compute(graph)
+    result = feature.compute(context)
 
     expected = {
         0: 2,
-        1: 2,
-        2: 2,
-        3: 2,
+        1: 1,
+        2: 1,
     }
 
     assert result == expected
 
 
+def test_degree_feature_global_scope_uses_full_graph():
+    """Test that global degree uses the complete graph."""
+    context = create_test_context()
+    feature = DegreeFeature(scope=FeatureScope.GLOBAL)
+
+    result = feature.compute(context)
+
+    assert result == {0: 2, 1: 2, 2: 2, 3: 2}
+
+
 def test_degree_feature_preserves_vertex_identifiers():
     """Test that degree values are associated with the correct vertex identifiers."""
-    graph = Graph(
-        vertices={10, 20, 30},
-        edges=[
-            (10, 20),
-            (20, 30),
-        ],
+    context = FeatureContext(
+        full_graph=Graph(
+            vertices={10, 20, 30},
+            edges=[
+                (10, 20),
+                (20, 30),
+            ],
+        ),
+        subgraph=Graph(
+            vertices={10, 20, 30},
+            edges=[
+                (10, 20),
+                (20, 30),
+            ],
+        ),
     )
 
     feature = DegreeFeature()
 
-    result = feature.compute(graph)
+    result = feature.compute(context)
 
     expected = {
         10: 1,
@@ -121,9 +161,9 @@ def test_degree_feature_preserves_vertex_identifiers():
     assert result == expected
 
 
-def test_features_reject_invalid_graph():
-    """Test that feature computation rejects objects that are not Graph instances."""
-    invalid_graph = "not a graph"
+def test_features_reject_invalid_context():
+    """Test that feature computation rejects invalid contexts."""
+    invalid_context = "not a feature context"
 
     features = [
         NumVerticesFeature(),
@@ -133,28 +173,28 @@ def test_features_reject_invalid_graph():
 
     for feature in features:
         with pytest.raises(TypeError):
-            feature.compute(invalid_graph)
+            feature.compute(invalid_context)
 
 
 def test_num_vertices_feature_with_empty_graph():
     """Test the number-of-vertices feature on an empty graph."""
-    graph = Graph(set(), [])
+    context = FeatureContext(Graph(set(), []), Graph(set(), []))
     feature = NumVerticesFeature()
 
-    assert feature.compute(graph) == 0
+    assert feature.compute(context) == 0
 
 
 def test_num_edges_feature_with_empty_graph():
     """Test the number-of-edges feature on an empty graph."""
-    graph = Graph(set(), [])
+    context = FeatureContext(Graph(set(), []), Graph(set(), []))
     feature = NumEdgesFeature()
 
-    assert feature.compute(graph) == 0
+    assert feature.compute(context) == 0
 
 
 def test_degree_feature_with_empty_graph():
     """Test the degree feature on an empty graph."""
-    graph = Graph(set(), [])
+    context = FeatureContext(Graph(set(), []), Graph(set(), []))
     feature = DegreeFeature()
 
-    assert feature.compute(graph) == {}
+    assert feature.compute(context) == {}

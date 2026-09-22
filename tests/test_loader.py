@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from src.loader import GraphLoader
+from src.graph.loader import GraphLoader
 
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "simple_graph"
