@@ -1,0 +1,119 @@
+[1] Loading existing test graph
+[2] Loading graph
+[3] Generating candidate subgraphs
+[4] Building and saving processed dataset
+Processed dataset saved to: /home/Thais/IC/csop-traditional-learning/data/processed/integration_test_graph.csv
+[5] Loading processed dataset
+[6] Inspecting X, y, and samples
+Number of samples: 6
+Number of features: 6
+Feature names: ['num_vertices', 'num_edges', 'degree_mean', 'degree_max', 'degree_min', 'degree_std']
+X:
+   num_vertices  num_edges  degree_mean  degree_max  degree_min  degree_std
+0             5          6     1.000000           1           1    0.000000
+1             5          6     2.000000           2           2    0.000000
+2             5          6     1.000000           1           1    0.000000
+3             5          6     2.000000           2           2    0.000000
+4             5          6     1.333333           2           1    0.471405
+5             5          6     1.000000           1           1    0.000000
+y:
+0    0.000000
+1    0.333333
+2    0.000000
+3    0.333333
+4    0.000000
+5    0.000000
+Name: target, dtype: float64
+
+Sample 0
+    graph_id: integration_test_graph
+    subgraph_id: 0
+    vertices: [3, 4]
+    features:
+        num_vertices: 5
+        num_edges: 6
+        degree_mean: 1.0
+        degree_max: 1
+        degree_min: 1
+        degree_std: 0.0
+    target: 0.0
+
+Sample 1
+    graph_id: integration_test_graph
+    subgraph_id: 1
+    vertices: [0, 1, 2]
+    features:
+        num_vertices: 5
+        num_edges: 6
+        degree_mean: 2.0
+        degree_max: 2
+        degree_min: 2
+        degree_std: 0.0
+    target: 0.3333333333333333
+
+Sample 2
+    graph_id: integration_test_graph
+    subgraph_id: 2
+    vertices: [2, 3]
+    features:
+        num_vertices: 5
+        num_edges: 6
+        degree_mean: 1.0
+        degree_max: 1
+        degree_min: 1
+        degree_std: 0.0
+    target: 0.0
+
+Sample 3
+    graph_id: integration_test_graph
+    subgraph_id: 3
+    vertices: [2, 3, 4]
+    features:
+        num_vertices: 5
+        num_edges: 6
+        degree_mean: 2.0
+        degree_max: 2
+        degree_min: 2
+        degree_std: 0.0
+    target: 0.3333333333333333
+
+Sample 4
+    graph_id: integration_test_graph
+    subgraph_id: 4
+    vertices: [1, 2, 3]
+    features:
+        num_vertices: 5
+        num_edges: 6
+        degree_mean: 1.3333333333333333
+        degree_max: 2
+        degree_min: 1
+        degree_std: 0.4714045207910317
+    target: 0.0
+
+Sample 5
+    graph_id: integration_test_graph
+    subgraph_id: 5
+    vertices: [1, 2]
+    features:
+        num_vertices: 5
+        num_edges: 6
+        degree_mean: 1.0
+        degree_max: 1
+        degree_min: 1
+        degree_std: 0.0
+    target: 0.0
+[7] Training LightGBM
+[8] Generating predictions
+[9] Evaluating predictions
+
+True targets:
+[0.0, 0.3333333333333333, 0.0, 0.3333333333333333, 0.0, 0.0]
+Predicted targets:
+[0.06561000222961108, 0.20211333880821858, 0.06561000222961108, 0.20211333880821858, 0.06561000222961108, 0.06561000222961108]
+Evaluation metrics:
+MAE: 0.08747999966144564
+RMSE: 0.0927865502974619
+R2: 0.6513215713978111
+
+[OK] Integration test completed successfully
+Summary: raw graph -> samples -> processed CSV -> Dataset -> trained model -> predictions -> evaluation.
