@@ -1,0 +1,16 @@
+{
+  "seed": 42,
+  "strategy": "random",
+  "test_ratio": 0.2,
+  "test_subgraph_ids": [
+    0,
+    1
+  ],
+  "train_ratio": 0.8,
+  "train_subgraph_ids": [
+    5,
+    2,
+    4,
+    3
+  ]
+}

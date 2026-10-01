@@ -2,8 +2,7 @@ from datetime import datetime, timezone
 import logging
 from pathlib import Path
 from typing import Any
-from uuid import uuid4
-
+import secrets
 from .artifact_store import ArtifactStore
 from .config import ExperimentConfig
 from .database import ExperimentDatabase
@@ -12,6 +11,7 @@ from .logger import create_experiment_logger
 from .resource_monitor import ProcessMemoryMonitor
 from .timer import Timer
 from .tracker import ExperimentTracker
+from .report import ExperimentReport
 
 
 class ExperimentManager:
@@ -31,6 +31,7 @@ class ExperimentManager:
         artifact_store: ArtifactStore,
         logger: logging.Logger,
         tracker: ExperimentTracker,
+        report_path: str | Path | None = None,
     ) -> None:
         self.experiment_id = experiment_id
         self.config = config
@@ -42,6 +43,11 @@ class ExperimentManager:
         self._status = self.CREATED
         self._entered = False
         self._finished = False
+        self.report_path = (
+            Path(report_path)
+            if report_path is not None
+            else experiment_root.parent.parent / "reports" / "experiments.xlsx"
+        )
 
     @classmethod
     def create(
@@ -56,6 +62,7 @@ class ExperimentManager:
         console_logging: bool = False,
         memory_monitor: ProcessMemoryMonitor | None = None,
         timer_factory=Timer,
+        report_path: str | Path | None = None,
     ) -> "ExperimentManager":
         """Create the experiment record and its initial metadata artifacts."""
         if not isinstance(config, ExperimentConfig):
@@ -63,7 +70,11 @@ class ExperimentManager:
         if not isinstance(database, ExperimentDatabase):
             raise TypeError("database must be an ExperimentDatabase.")
 
-        resolved_id = experiment_id or f"EXP_{uuid4().hex}"
+        if experiment_id is None:
+            date_prefix = datetime.now(timezone.utc).strftime("%Y%m%d")
+            resolved_id = f"EXP_{date_prefix}_{secrets.token_hex(6)}"
+        else:
+            resolved_id = experiment_id
         if not isinstance(resolved_id, str) or not resolved_id.strip():
             raise ValueError("experiment_id must be a non-empty string.")
 
@@ -112,6 +123,7 @@ class ExperimentManager:
             artifact_store=store,
             logger=logger,
             tracker=tracker,
+            report_path=report_path,
         )
 
         tracker.register_artifact(
@@ -174,6 +186,17 @@ class ExperimentManager:
         else:
             self._status = final_status
             self._finished = True
+
+        try:
+            ExperimentReport(self.database).update_xlsx(
+                self.report_path,
+                self.experiment_id,
+            )
+        except Exception:
+            self.logger.exception(
+                "Could not update experiment XLSX report at %s",
+                self.report_path,
+            )
 
         if exception is None:
             self.logger.info("Experiment completed")

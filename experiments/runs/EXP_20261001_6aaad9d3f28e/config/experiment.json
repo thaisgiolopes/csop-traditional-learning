@@ -1,0 +1,51 @@
+{
+  "dataset_split": {
+    "parameters": {},
+    "seed": 42,
+    "strategy": "random",
+    "test_ratio": 0.2,
+    "train_ratio": 0.8
+  },
+  "description": "LightGBM prediction of TDS for candidate subgraphs.",
+  "features": {
+    "feature_names": [
+      "num_vertices",
+      "num_edges",
+      "degree_mean",
+      "degree_max",
+      "degree_min",
+      "degree_std"
+    ],
+    "feature_set_id": "graph-size-and-local-degree-v1",
+    "objective_name": "tds"
+  },
+  "graph": {
+    "graph_id": "integration_test_graph",
+    "parameters": {
+      "directed": false,
+      "format": "adjlist"
+    },
+    "path": "/home/Thais/IC/csop-traditional-learning/data/raw/graph_test",
+    "source": null
+  },
+  "model": {
+    "hyperparameters": {
+      "learning_rate": 0.1,
+      "min_child_samples": 1,
+      "n_estimators": 5,
+      "num_leaves": 5,
+      "random_state": 42,
+      "verbosity": -1
+    },
+    "model_type": "lightgbm"
+  },
+  "name": "CSOP TDS baseline",
+  "random_seed": 42,
+  "subgraph_generation": {
+    "method": "networkx_random_paths",
+    "parameters": {},
+    "path_length": 3,
+    "sample_count": 8,
+    "seed": 42
+  }
+}

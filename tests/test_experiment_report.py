@@ -6,6 +6,65 @@ import pytest
 from src.experiments.artifact_store import ArtifactStore
 from src.experiments.database import ExperimentDatabase
 from src.experiments.report import ExperimentReport, SUMMARY_COLUMNS
+from openpyxl import load_workbook
+
+
+def test_update_xlsx_upserts_only_requested_experiment(
+    database,
+    tmp_path,
+):
+    path_1 = add_experiment(database, tmp_path, "EXP_001")
+    path_2 = add_experiment(database, tmp_path, "EXP_002")
+
+    report_path = tmp_path / "reports" / "experiments.xlsx"
+    report = ExperimentReport(database)
+
+    report.update_xlsx(report_path, "EXP_001")
+    report.update_xlsx(report_path, "EXP_002")
+    report.update_xlsx(report_path, "EXP_002")
+
+    workbook = load_workbook(report_path, read_only=True)
+    rows = list(workbook["Experiments"].values)
+    workbook.close()
+
+    assert rows[0][0] == "experiment_id"
+    assert [row[0] for row in rows[1:]] == ["EXP_001", "EXP_002"]
+    assert path_1.is_file()
+    assert path_2.is_file()
+
+
+def test_update_xlsx_writes_stage_artifact_prediction_and_metric_sheets(
+    database,
+    tmp_path,
+):
+    add_experiment(database, tmp_path, "EXP_001")
+    database.register_stage("EXP_001", "training", "completed", duration_seconds=1.5)
+    database.register_artifact(
+        "ART_001",
+        "EXP_001",
+        "models",
+        "model.bin",
+        "EXP_001/models/model.bin",
+        "application/octet-stream",
+    )
+    database.register_prediction(
+        "EXP_001",
+        "sample-1",
+        0.75,
+        actual_value=0.8,
+        prediction_error=-0.05,
+    )
+    database.register_evaluation("EXP_001", "mae", 0.05)
+
+    report_path = tmp_path / "reports" / "experiments.xlsx"
+    ExperimentReport(database).update_xlsx(report_path, "EXP_001")
+
+    workbook = load_workbook(report_path, read_only=True)
+    assert workbook["Stages"].max_row == 2
+    assert workbook["Artifacts"].max_row == 2
+    assert workbook["Predictions"].max_row == 2
+    assert workbook["Evaluations"].max_row == 2
+    workbook.close()
 
 
 @pytest.fixture
