@@ -4,7 +4,7 @@ import numpy as np
 
 from src.dataset.builder import DatasetBuilder
 from src.dataset.dataset import Dataset
-from src.evaluation.evaluator import Evaluator
+from src.dataset.splitter import split_dataset
 from src.evaluation.result import EvaluationResult
 from src.features.base import FeatureScope
 from src.features.engine import FeatureEngine
@@ -15,18 +15,22 @@ from src.features.graph_features import (
 from src.features.node_features import DegreeFeature
 from src.features.pooling import MaxPooling, MeanPooling
 from src.graph.loader import GraphLoader
+from src.model.base import Model
 from src.model.lightgbm_model import LightGBMModel
 from src.model.predictor import PredictionResult, Predictor
 from src.objectives.tds import TDSObjective
+from src.pipeline.prediction_pipeline import (
+    PredictionEvaluationResult,
+    PredictionPipeline,
+)
+from src.pipeline.training_pipeline import TrainingPipeline
 from src.subgraphs.networkx_generator import NetworkXSubgraphGenerator
-
+from src.evaluation.evaluator import Evaluator
 
 def test_complete_csop_prediction_pipeline():
     """
-    Test the complete pipeline from graph loading through evaluation.
-
-    The test verifies structural integration and metadata preservation. It
-    does not assert scientific model accuracy.
+    Test dataset construction, train/test splitting, training, prediction,
+    and evaluation. The test checks integration, not scientific accuracy.
     """
     fixture_path = (
         Path(__file__).parent
@@ -40,7 +44,6 @@ def test_complete_csop_prediction_pipeline():
         path_length=2,
         seed=42,
     )
-
     feature_engine = FeatureEngine(
         features=[
             NumVerticesFeature(),
@@ -48,7 +51,6 @@ def test_complete_csop_prediction_pipeline():
             DegreeFeature(scope=FeatureScope.LOCAL),
         ]
     )
-
     builder = DatasetBuilder(
         graph_loader=graph_loader,
         subgraph_generator=subgraph_generator,
@@ -65,6 +67,7 @@ def test_complete_csop_prediction_pipeline():
     dataset = Dataset(samples)
 
     assert dataset.num_samples == len(samples)
+    assert dataset.num_samples >= 2
     assert dataset.num_features == 4
     assert list(dataset.X.columns) == [
         "num_vertices",
@@ -73,8 +76,26 @@ def test_complete_csop_prediction_pipeline():
         "degree_max",
     ]
     assert len(dataset.y) == dataset.num_samples
-    assert dataset.graph_ids == ["integration_graph"] * dataset.num_samples
+    assert dataset.graph_ids == [
+        "integration_graph"
+    ] * dataset.num_samples
     assert dataset.subgraph_ids == list(range(dataset.num_samples))
+
+    train_dataset, test_dataset = split_dataset(
+        dataset,
+        test_size=0.2,
+        random_state=42,
+    )
+
+    train_ids = set(train_dataset.subgraph_ids)
+    test_ids = set(test_dataset.subgraph_ids)
+
+    assert train_ids.isdisjoint(test_ids)
+    assert train_ids | test_ids == set(dataset.subgraph_ids)
+    assert train_dataset.num_samples + test_dataset.num_samples \
+        == dataset.num_samples
+    assert train_dataset.feature_names == dataset.feature_names
+    assert test_dataset.feature_names == dataset.feature_names
 
     model = LightGBMModel(
         n_estimators=5,
@@ -84,12 +105,29 @@ def test_complete_csop_prediction_pipeline():
         verbosity=-1,
         random_state=42,
     )
+    trained_model = TrainingPipeline(
+        dataset=train_dataset,
+        model=model,
+    ).run()
 
-    assert model.fit(dataset.X, dataset.y) is model
+    assert isinstance(trained_model, Model)
+    assert trained_model is model
 
-    prediction_results = Predictor(model).predict(dataset)
+    pipeline_result = PredictionPipeline(
+        model=trained_model,
+        dataset=test_dataset,
+        predictor=Predictor(trained_model),
+        evaluator=Evaluator(),
+    ).run()
 
-    assert len(prediction_results) == dataset.num_samples
+    assert isinstance(pipeline_result, PredictionEvaluationResult)
+
+    prediction_results = pipeline_result.predictions
+    evaluation_result = pipeline_result.evaluation
+
+    assert isinstance(evaluation_result, EvaluationResult)
+    assert len(prediction_results) == test_dataset.num_samples
+    assert evaluation_result.num_samples == test_dataset.num_samples
     assert all(
         isinstance(result, PredictionResult)
         for result in prediction_results
@@ -97,25 +135,12 @@ def test_complete_csop_prediction_pipeline():
     assert [
         (result.graph_id, result.subgraph_id)
         for result in prediction_results
-    ] == list(zip(dataset.graph_ids, dataset.subgraph_ids))
+    ] == list(zip(test_dataset.graph_ids, test_dataset.subgraph_ids))
     assert np.isfinite(
         [result.predicted_target for result in prediction_results]
     ).all()
 
-    evaluation_result = Evaluator().evaluate(
-        dataset.y,
-        [
-            result.predicted_target
-            for result in prediction_results
-        ],
-    )
-
-    assert isinstance(evaluation_result, EvaluationResult)
-    assert evaluation_result.num_samples == dataset.num_samples
+    # R2 is undefined when the test set contains only one sample.
     assert np.isfinite(
-        [
-            evaluation_result.mae,
-            evaluation_result.rmse,
-            evaluation_result.r2,
-        ]
+        [evaluation_result.mae, evaluation_result.rmse]
     ).all()
