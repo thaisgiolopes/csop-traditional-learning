@@ -1,13 +1,9 @@
 """
-End-to-end architecture integration test for the CSOP project.
+End-to-end experiment for the CSOP prediction pipeline.
 
-This script reads a graph instance from data/raw/graph_test, builds and
-persists a machine-learning dataset, loads it again, trains LightGBM,
-generates predictions, and evaluates them.
-
-The metrics produced here are not experimental results. The same dataset is
-used for training and prediction, so the values must not be interpreted as
-evidence of model generalization.
+Candidate subgraphs from one graph are split into training and test datasets.
+Metrics are calculated only on test candidates and should be interpreted
+cautiously because the current dataset is small.
 """
 
 from contextlib import redirect_stdout
@@ -24,6 +20,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from src.dataset.builder import DatasetBuilder
 from src.dataset.dataset import Dataset
 from src.dataset.loader import DatasetLoader
+from src.dataset.splitter import split_dataset
 from src.evaluation.evaluator import Evaluator
 from src.evaluation.result import EvaluationResult
 from src.features.base import FeatureScope
@@ -54,62 +51,49 @@ from src.subgraphs.networkx_generator import NetworkXSubgraphGenerator
 
 
 GRAPH_ID = "integration_test_graph"
+TEST_SIZE = 0.2
+SPLIT_RANDOM_STATE = 42
 
 
 def main() -> None:
-    """
-    Execute the complete CSOP pipeline integration test.
-
-    The raw graph is read from ``data/raw/graph_test`` and is never modified.
-    The processed dataset is saved under ``data/processed``. All execution
-    output is written to ``experiments/results/result_first_test``.
-    """
     raw_instance_path = PROJECT_ROOT / "data" / "raw" / "graph_test"
     processed_root = PROJECT_ROOT / "data" / "processed"
-    processed_root.mkdir(parents=True, exist_ok=True)
-
     processed_dataset_path = processed_root / f"{GRAPH_ID}.csv"
-
     results_path = (
         PROJECT_ROOT
         / "experiments"
         / "results"
         / "result_first_test.txt"
     )
+
+    processed_root.mkdir(parents=True, exist_ok=True)
     results_path.parent.mkdir(parents=True, exist_ok=True)
 
     with results_path.open("w", encoding="utf-8") as result_file:
         with redirect_stdout(result_file):
-            print("[1] Loading existing test graph")
-
             assert raw_instance_path.is_dir(), (
                 f"Raw graph directory not found: {raw_instance_path}"
             )
             assert (raw_instance_path / "metadata").is_file()
             assert (raw_instance_path / "adjlist").is_file()
 
-            print("[2] Loading graph")
-
+            print("[1] Loading graph")
             graph_loader = GraphLoader(raw_instance_path)
             graph = graph_loader.load()
 
             assert graph.num_vertices == 5
             assert graph.num_edges == 6
 
-            print("[3] Generating candidate subgraphs")
-
+            print("[2] Generating candidate subgraphs")
             subgraph_generator = NetworkXSubgraphGenerator(
                 num_subgraphs=8,
                 path_length=3,
                 seed=42,
             )
-
             candidate_subgraphs = subgraph_generator.generate(graph)
+            assert candidate_subgraphs
 
-            assert len(candidate_subgraphs) > 0
-
-            print("[4] Building and saving processed dataset")
-
+            print("[3] Building and saving dataset")
             feature_engine = FeatureEngine(
                 features=[
                     NumVerticesFeature(),
@@ -117,7 +101,6 @@ def main() -> None:
                     DegreeFeature(scope=FeatureScope.LOCAL),
                 ]
             )
-
             pooling_strategies = {
                 "degree": (
                     MeanPooling(),
@@ -126,7 +109,6 @@ def main() -> None:
                     StdPooling(),
                 ),
             }
-
             dataset_builder = DatasetBuilder(
                 graph_loader=graph_loader,
                 subgraph_generator=subgraph_generator,
@@ -134,12 +116,10 @@ def main() -> None:
                 pooling_strategies=pooling_strategies,
                 objective_function=TDSObjective(),
             )
-
             dataset_pipeline = DatasetPipeline(
                 dataset_builder=dataset_builder,
                 processed_dir=processed_root,
             )
-
             built_dataset = dataset_pipeline.run(
                 graph_id=GRAPH_ID,
                 output_path=processed_dataset_path,
@@ -148,42 +128,20 @@ def main() -> None:
             assert built_dataset.num_samples > 0
             assert processed_dataset_path.is_file()
 
-            print(
-                f"Processed dataset saved to: {processed_dataset_path}"
-            )
-
-            print("[5] Loading processed dataset")
-
-            dataset_loader = DatasetLoader(processed_dataset_path)
-            dataset = dataset_loader.load()
+            print("[4] Loading processed dataset")
+            dataset = DatasetLoader(processed_dataset_path).load()
 
             assert isinstance(dataset, Dataset)
-            assert dataset.num_samples > 0
-
-            print("[6] Inspecting X, y, and samples")
-
-            print(f"Number of samples: {dataset.num_samples}")
-            print(f"Number of features: {dataset.num_features}")
-            print(f"Feature names: {dataset.feature_names}")
-            print("X:")
-            print(dataset.X)
-            print("y:")
-            print(dataset.y)
-
+            assert dataset.num_samples >= 2
             assert len(candidate_subgraphs) == dataset.num_samples
-            assert len(dataset.X) == len(dataset.y)
-            assert len(dataset.X) > 0
-            assert len(dataset.y) > 0
-
+            assert dataset.subgraph_ids == list(
+                range(dataset.num_samples)
+            )
             assert all(
                 graph_id == GRAPH_ID
                 for graph_id in dataset.graph_ids
             )
-            assert dataset.subgraph_ids == list(
-                range(dataset.num_samples)
-            )
-
-            expected_feature_names = [
+            assert dataset.feature_names == [
                 "num_vertices",
                 "num_edges",
                 "degree_mean",
@@ -192,35 +150,49 @@ def main() -> None:
                 "degree_std",
             ]
 
-            assert dataset.feature_names == expected_feature_names
+            print(f"Total samples: {dataset.num_samples}")
+            print(f"Number of features: {dataset.num_features}")
+            print(f"Feature names: {dataset.feature_names}")
+            print("Full feature matrix:")
+            print(dataset.X)
+            print("Full target vector:")
+            print(dataset.y)
 
-            for sample_index, (sample, subgraph) in enumerate(
-                zip(
-                    dataset.samples,
-                    candidate_subgraphs,
-                    strict=True,
-                )
+            for sample, subgraph in zip(
+                dataset.samples,
+                candidate_subgraphs,
+                strict=True,
             ):
                 print()
-                print(f"Sample {sample_index}")
+                print(f"Sample {sample.subgraph_id}")
                 print(f"    graph_id: {sample.graph_id}")
-                print(f"    subgraph_id: {sample.subgraph_id}")
-                print(
-                    f"    vertices: {sorted(subgraph.vertices)}"
-                )
-                print("    features:")
-
-                for feature_name, feature_value in (
-                    sample.features.items()
-                ):
-                    print(
-                        f"        {feature_name}: {feature_value}"
-                    )
-
+                print(f"    vertices: {sorted(subgraph.vertices)}")
+                print(f"    features: {sample.features}")
                 print(f"    target: {sample.target}")
 
-            print("[7] Training LightGBM")
+            print("[5] Splitting candidates into train and test")
+            train_dataset, test_dataset = split_dataset(
+                dataset,
+                test_size=TEST_SIZE,
+                random_state=SPLIT_RANDOM_STATE,
+            )
 
+            train_ids = set(train_dataset.subgraph_ids)
+            test_ids = set(test_dataset.subgraph_ids)
+
+            assert train_ids.isdisjoint(test_ids)
+            assert train_ids | test_ids == set(dataset.subgraph_ids)
+            assert train_dataset.num_samples + test_dataset.num_samples \
+                == dataset.num_samples
+            assert train_dataset.feature_names == dataset.feature_names
+            assert test_dataset.feature_names == dataset.feature_names
+
+            print(f"Training samples: {train_dataset.num_samples}")
+            print(f"Training subgraph IDs: {train_dataset.subgraph_ids}")
+            print(f"Test samples: {test_dataset.num_samples}")
+            print(f"Test subgraph IDs: {test_dataset.subgraph_ids}")
+
+            print("[6] Training LightGBM on training dataset")
             model = LightGBMModel(
                 n_estimators=5,
                 learning_rate=0.1,
@@ -229,25 +201,20 @@ def main() -> None:
                 verbosity=-1,
                 random_state=42,
             )
-
             trained_model = TrainingPipeline(
-                dataset=dataset,
+                dataset=train_dataset,
                 model=model,
             ).run()
 
             assert isinstance(trained_model, Model)
             assert trained_model is model
 
-            print("[8] Generating predictions")
-
+            print("[7] Predicting and evaluating on test dataset")
             predictor = Predictor(trained_model)
             evaluator = Evaluator()
-
-            print("[9] Evaluating predictions")
-
             pipeline_result = PredictionPipeline(
                 model=trained_model,
-                dataset=dataset,
+                dataset=test_dataset,
                 predictor=predictor,
                 evaluator=evaluator,
             ).run()
@@ -264,21 +231,18 @@ def main() -> None:
             prediction_results = pipeline_result.predictions
             evaluation_result = pipeline_result.evaluation
 
-            assert len(prediction_results) == len(dataset.y)
-            assert len(prediction_results) > 0
-
+            assert len(prediction_results) == test_dataset.num_samples
             assert all(
                 isinstance(result, PredictionResult)
                 for result in prediction_results
             )
-
             assert all(
                 result.graph_id == graph_id
                 and result.subgraph_id == subgraph_id
                 for result, graph_id, subgraph_id in zip(
                     prediction_results,
-                    dataset.graph_ids,
-                    dataset.subgraph_ids,
+                    test_dataset.graph_ids,
+                    test_dataset.subgraph_ids,
                     strict=True,
                 )
             )
@@ -289,41 +253,29 @@ def main() -> None:
                     for result in prediction_results
                 ]
             )
-
-            assert predicted_values.shape == (
-                dataset.num_samples,
-            )
-            assert np.issubdtype(
-                predicted_values.dtype,
-                np.number,
-            )
+            assert predicted_values.shape == (test_dataset.num_samples,)
+            assert np.issubdtype(predicted_values.dtype, np.number)
             assert np.isfinite(predicted_values).all()
 
-            assert (
-                evaluation_result.num_samples
-                == dataset.num_samples
-            )
-            assert isinstance(evaluation_result.mae, float)
-            assert isinstance(evaluation_result.rmse, float)
-            assert isinstance(evaluation_result.r2, float)
+            assert evaluation_result.num_samples == test_dataset.num_samples
+            assert np.isfinite(evaluation_result.mae)
+            assert np.isfinite(evaluation_result.rmse)
 
             print()
-            print("True targets:")
-            print(dataset.y.to_list())
-
-            print("Predicted targets:")
+            print("True test targets:")
+            print(test_dataset.y.to_list())
+            print("Predicted test targets:")
             print(predicted_values.tolist())
-
-            print("Evaluation metrics:")
+            print("Test metrics:")
             print(f"MAE: {evaluation_result.mae}")
             print(f"RMSE: {evaluation_result.rmse}")
             print(f"R2: {evaluation_result.r2}")
 
             print()
-            print("[OK] Integration test completed successfully")
+            print("[OK] Integration experiment completed")
             print(
-                "Summary: raw graph -> samples -> processed CSV "
-                "-> Dataset -> trained model -> predictions "
+                "Summary: graph -> candidates -> dataset -> "
+                "train/test split -> training -> test prediction "
                 "-> evaluation."
             )
 
