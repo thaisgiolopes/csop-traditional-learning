@@ -1,0 +1,14 @@
+{
+  "edges": [
+    [
+      1,
+      2
+    ]
+  ],
+  "graph_id": "integration_test_graph",
+  "subgraph_id": 5,
+  "vertices": [
+    1,
+    2
+  ]
+}

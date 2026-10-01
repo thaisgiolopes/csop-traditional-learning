@@ -5,3 +5,4 @@ scikit-learn
 networkx
 torch_geometric
 pytest
+openpyxl

@@ -1,0 +1,3 @@
+graph_id,subgraph_id,num_vertices,num_edges,degree_mean,degree_max,degree_min,degree_std,target
+integration_test_graph,0,5,6,1.0,1,1,0.0,0.0
+integration_test_graph,1,5,6,2.0,2,2,0.0,0.3333333333333333

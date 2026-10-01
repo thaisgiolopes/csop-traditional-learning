@@ -1,0 +1,6 @@
+{
+  "graph_id": "integration_test_graph",
+  "num_edges": 6,
+  "num_vertices": 5,
+  "source_path": "/home/Thais/IC/csop-traditional-learning/data/raw/graph_test"
+}
