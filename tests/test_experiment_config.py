@@ -42,9 +42,9 @@ def make_config(graph_path: Path | None = None) -> ExperimentConfig:
         ),
         dataset_split=DatasetSplitConfig(
             strategy="random",
-            train_ratio=0.8,
             test_ratio=0.2,
-            seed=11,
+            validation_size=0.25,
+            random_state=11,
             parameters={"shuffle": True},
         ),
         model=ModelConfig(
@@ -69,7 +69,8 @@ def test_valid_experiment_configuration_creation():
         "num_vertices",
         "degree_mean",
     ]
-    assert config.dataset_split.train_ratio == 0.8
+    assert config.dataset_split.validation_size == 0.25
+    assert config.dataset_split.random_state == 11
     assert config.model.model_type == "lightgbm"
 
 
@@ -125,33 +126,36 @@ def test_feature_names_must_be_unique():
 
 
 @pytest.mark.parametrize(
-    ("train_ratio", "test_ratio"),
+    ("test_ratio", "validation_size"),
     [
-        (0, 1),
-        (1, 0),
-        (-0.1, 1.1),
+        (0, 0.2),
+        (1, 0.2),
+        (0.2, 0),
+        (0.2, 1),
+        (-0.1, 0.2),
         (float("nan"), 0.2),
         (True, 0.2),
     ],
 )
-def test_split_ratios_must_be_numeric_and_between_zero_and_one(
-    train_ratio,
+def test_split_sizes_must_be_numeric_and_between_zero_and_one(
     test_ratio,
+    validation_size,
 ):
     with pytest.raises((TypeError, ValueError)):
         DatasetSplitConfig(
             strategy="random",
-            train_ratio=train_ratio,
             test_ratio=test_ratio,
+            validation_size=validation_size,
         )
 
 
-def test_split_ratios_must_sum_to_one():
-    with pytest.raises(ValueError, match="must equal 1"):
+def test_split_random_state_must_be_an_integer_or_none():
+    with pytest.raises(TypeError, match="random_state"):
         DatasetSplitConfig(
             strategy="random",
-            train_ratio=0.7,
             test_ratio=0.2,
+            validation_size=0.25,
+            random_state=1.5,
         )
 
 

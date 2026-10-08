@@ -37,8 +37,9 @@ def make_config() -> ExperimentConfig:
         ),
         dataset_split=DatasetSplitConfig(
             strategy="random",
-            train_ratio=0.8,
             test_ratio=0.2,
+            validation_size=0.25,
+            random_state=11,
         ),
         model=ModelConfig(model_type="test-model"),
     )
@@ -191,17 +192,27 @@ def test_prediction_and_evaluation_registration_are_exposed(
             actual_value=0.8,
             prediction_error=-0.1,
         )
-        evaluation = manager.register_evaluation("mae", 0.1)
+        evaluations = [
+            manager.register_evaluation("train_mae", 0.01),
+            manager.register_evaluation("validation_mae", 0.12),
+            manager.register_evaluation("test_mae", 0.15),
+        ]
 
     assert prediction.predicted_value == 0.7
-    assert evaluation.metric_value == 0.1
     assert database.get_experiment_predictions(manager.experiment_id) == [
         prediction
     ]
-    assert database.get_experiment_evaluations(manager.experiment_id) == [
-        evaluation
+    assert [item.metric_name for item in evaluations] == [
+        "train_mae",
+        "validation_mae",
+        "test_mae",
     ]
-
+    assert [
+        item.metric_value
+        for item in database.get_experiment_evaluations(
+            manager.experiment_id
+        )
+    ] == [0.01, 0.12, 0.15]
 
 def test_repeated_creation_generates_distinct_experiment_ids(
     database,

@@ -151,36 +151,35 @@ class FeatureConfig:
 
 @dataclass
 class DatasetSplitConfig:
-    """Describes how samples are divided into training and test sets."""
+    """Configures the final test and development train/validation splits.
+
+    validation_size is a fraction of the development data, after removing
+    the final test set.
+    """
 
     strategy: str
-    train_ratio: float
     test_ratio: float
-    seed: int | None = None
+    validation_size: float
+    random_state: int | None = None
     parameters: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         _validate_non_empty_string(self.strategy, "strategy")
 
-        for field_name in ("train_ratio", "test_ratio"):
+        for field_name in ("test_ratio", "validation_size"):
             ratio = getattr(self, field_name)
             if isinstance(ratio, bool) or not isinstance(ratio, (int, float)):
                 raise TypeError(f"{field_name} must be numeric.")
             if not math.isfinite(ratio) or not 0 < ratio < 1:
-                raise ValueError(f"{field_name} must be greater than 0 and less than 1.")
+                raise ValueError(
+                    f"{field_name} must be greater than 0 and less than 1."
+                )
 
-        if not math.isclose(
-            self.train_ratio + self.test_ratio,
-            1.0,
-            rel_tol=0.0,
-            abs_tol=1e-9,
+        if self.random_state is not None and (
+            isinstance(self.random_state, bool)
+            or not isinstance(self.random_state, int)
         ):
-            raise ValueError("train_ratio + test_ratio must equal 1.")
-
-        if self.seed is not None and (
-            isinstance(self.seed, bool) or not isinstance(self.seed, int)
-        ):
-            raise TypeError("seed must be an integer or None.")
+            raise TypeError("random_state must be an integer or None.")
 
         _validate_parameters(self.parameters, "dataset split parameters")
 

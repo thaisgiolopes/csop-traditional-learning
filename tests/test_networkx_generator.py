@@ -168,3 +168,31 @@ def test_generator_is_reproducible_with_same_seed():
     for subgraph_a, subgraph_b in zip(subgraphs_a, subgraphs_b):
         assert subgraph_a.vertices == subgraph_b.vertices
         assert subgraph_a.edges == subgraph_b.edges
+
+
+def test_indexed_generation_is_reproducible_across_batches():
+    graph = create_test_graph()
+    generator = NetworkXSubgraphGenerator(
+        num_subgraphs=1,
+        path_length=2,
+        seed=42,
+    )
+
+    full_sequence = [
+        generator.generate_at_index(graph, index)
+        for index in range(12)
+    ]
+    incremental_sequence = [
+        generator.generate_at_index(graph, index)
+        for index in range(7)
+    ] + [
+        generator.generate_at_index(graph, index)
+        for index in range(7, 12)
+    ]
+
+    assert [item.vertices for item in full_sequence] == [
+        item.vertices for item in incremental_sequence
+    ]
+    assert [item.edges for item in full_sequence] == [
+        item.edges for item in incremental_sequence
+    ]

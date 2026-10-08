@@ -1,0 +1,21 @@
+{
+  "dependency_versions": {
+    "lightgbm": "4.7.0",
+    "networkx": "3.7",
+    "numpy": "2.5.3",
+    "openpyxl": "3.1.5",
+    "pandas": "3.0.6",
+    "pytest": "9.1.1",
+    "scikit-learn": "1.9.1",
+    "torch_geometric": "2.8.0.post1"
+  },
+  "hostname": "gedai-Avell",
+  "machine_architecture": "x86_64",
+  "operating_system": "Linux",
+  "os_release": "7.0.0-38-generic",
+  "processor": null,
+  "python_version": "3.14.4",
+  "repository_dirty": true,
+  "repository_git_branch": "main",
+  "repository_git_commit": "e8a30fc9cc25351d796bfc078c9b6014602caeb3"
+}

@@ -1,10 +1,12 @@
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
+from collections.abc import Collection
 
 import pandas as pd
 
 from ..dataset.dataset import Dataset
 from ..dataset.builder import DatasetBuilder
+from ..graph import Graph
 
 
 class DatasetPipeline:
@@ -38,12 +40,17 @@ class DatasetPipeline:
         self,
         graph_id: Any = None,
         output_path: Path | str | None = None,
+        *,
+        candidate_subgraphs: Collection[Graph] | None = None,
+        sample_ids: Sequence[str] | None = None,
     ) -> Dataset:
         """
         Build and persist a dataset for one graph instance.
 
         The raw graph instance is read through the ``GraphLoader`` owned by
-        the injected ``DatasetBuilder``. Raw files are never modified.
+        the injected ``DatasetBuilder``. When candidate subgraphs are
+        supplied, they are used directly and are not regenerated. Raw files
+        are never modified.
 
         Args:
             graph_id: Optional identifier passed to ``DatasetBuilder``.
@@ -58,7 +65,11 @@ class DatasetPipeline:
             ValueError: If the builder produces no samples or samples with
                 inconsistent graph identifiers.
         """
-        samples = self._dataset_builder.build(graph_id=graph_id)
+        samples = self._dataset_builder.build(
+            graph_id=graph_id,
+            candidate_subgraphs=candidate_subgraphs,
+            sample_ids=sample_ids,
+        )
         dataset = Dataset(samples)
 
         if not dataset.graph_ids:
@@ -82,6 +93,12 @@ class DatasetPipeline:
         tabular_dataset = dataset.X.copy()
         tabular_dataset.insert(0, "graph_id", dataset.graph_ids)
         tabular_dataset.insert(1, "subgraph_id", dataset.subgraph_ids)
+        if any(sample.sample_id is not None for sample in dataset.samples):
+            tabular_dataset.insert(
+                2,
+                "sample_id",
+                [sample.sample_id for sample in dataset.samples],
+            )
         tabular_dataset["target"] = dataset.y.to_numpy()
 
         tabular_dataset.to_csv(output_file, index=False)

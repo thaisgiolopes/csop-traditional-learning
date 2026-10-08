@@ -29,8 +29,9 @@ SUMMARY_COLUMNS = (
     "feature_names_json",
     "number_of_features",
     "dataset_split_strategy",
-    "train_ratio",
     "test_ratio",
+    "validation_size",
+    "random_state",
     "model_type",
     "model_hyperparameters_json",
     "recorded_stage_count",
@@ -60,9 +61,9 @@ XLSX_SHEETS = {
         "num_features",
         "objective_name",
         "split_strategy",
-        "train_ratio",
         "test_ratio",
-        "split_seed",
+        "validation_size",
+        "split_random_state",
         "model_type",
         "model_hyperparameters",
         "total_duration_seconds",
@@ -414,11 +415,11 @@ class ExperimentReport:
             "num_features": len(feature_names),
             "objective_name": features.get("objective_name") or "",
             "split_strategy": split.get("strategy") or "",
-            "train_ratio": split.get("train_ratio", ""),
             "test_ratio": split.get("test_ratio", ""),
-            "split_seed": (
-                split.get("seed")
-                if split.get("seed") is not None
+            "validation_size": split.get("validation_size", ""),
+            "split_random_state": (
+                split.get("random_state")
+                if split.get("random_state") is not None
                 else ""
             ),
             "model_type": model.get("model_type") or "",
@@ -614,8 +615,13 @@ class ExperimentReport:
             "feature_names_json": _json_cell(feature_names),
             "number_of_features": len(feature_names),
             "dataset_split_strategy": split.get("strategy", ""),
-            "train_ratio": split.get("train_ratio", ""),
             "test_ratio": split.get("test_ratio", ""),
+            "validation_size": split.get("validation_size", ""),
+            "random_state": (
+                split.get("random_state")
+                if split.get("random_state") is not None
+                else ""
+            ),
             "model_type": model.get("model_type", ""),
             "model_hyperparameters_json": _json_cell(
                 model.get("hyperparameters") or {}

@@ -1,9 +1,10 @@
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping, Sequence
 from typing import Any
 
 from ..features.base import FeatureLevel, FeatureContext
 from ..features.engine import FeatureEngine
 from ..features.pooling import Pooling
+from ..graph import Graph
 from ..graph.loader import GraphLoader
 from ..objectives.base import ObjectiveFunction
 from ..subgraphs.base import SubgraphGenerator
@@ -64,7 +65,13 @@ class DatasetBuilder:
             for feature in feature_engine.features
         }
 
-    def build(self, graph_id: Any = None) -> list[Sample]:
+    def build(
+        self,
+        graph_id: Any = None,
+        *,
+        candidate_subgraphs: Collection[Graph] | None = None,
+        sample_ids: Sequence[str] | None = None,
+    ) -> list[Sample]:
         """
         Build dataset samples for one complete graph instance.
 
@@ -102,13 +109,19 @@ class DatasetBuilder:
         global_results = self._feature_engine.compute_global(global_context)
         global_features = self._prepare_features(global_results)
 
-        candidate_subgraphs = self._subgraph_generator.generate(
-            complete_graph
-        )
+        if candidate_subgraphs is None:
+            candidates = list(self._subgraph_generator.generate(complete_graph))
+        else:
+            candidates = list(candidate_subgraphs)
+
+        if sample_ids is not None and len(sample_ids) != len(candidates):
+            raise ValueError(
+                "sample_ids must have the same length as candidate_subgraphs."
+            )
 
         samples = []
 
-        for subgraph_id, subgraph in enumerate(candidate_subgraphs):
+        for subgraph_id, subgraph in enumerate(candidates):
             # Local features are computed independently for each candidate
             # subgraph.
             local_context = FeatureContext(
@@ -132,6 +145,11 @@ class DatasetBuilder:
                     subgraph_id=subgraph_id,
                     features=feature_vector,
                     target=target,
+                    sample_id=(
+                        sample_ids[subgraph_id]
+                        if sample_ids is not None
+                        else None
+                    ),
                 )
             )
 

@@ -101,8 +101,9 @@ def add_experiment(
             },
             "dataset_split": {
                 "strategy": "random",
-                "train_ratio": 0.8,
                 "test_ratio": 0.2,
+                "validation_size": 0.25,
+                "random_state": 11,
                 "parameters": {},
             },
             "model": {
@@ -200,8 +201,9 @@ def test_report_includes_status_model_features_and_split(
         "degree_max",
     ]
     assert row["dataset_split_strategy"] == "random"
-    assert row["train_ratio"] == "0.8"
+    assert row["validation_size"] == "0.25"
     assert row["test_ratio"] == "0.2"
+    assert row["random_state"] == "11"
 
 
 def test_report_includes_stage_count_evaluation_and_prediction_count(
@@ -294,8 +296,9 @@ def test_nested_configuration_is_serialized_deterministically(
         },
         "dataset_split": {
             "strategy": "random",
-            "train_ratio": 0.8,
             "test_ratio": 0.2,
+            "validation_size": 0.25,
+            "random_state": 11,
             "parameters": {"shuffle": True},
         },
         "model": {

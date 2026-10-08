@@ -20,6 +20,7 @@ class PredictionResult:
     subgraph_id: Any
     predicted_target: float
     true_target: float | None = None
+    sample_id: str | None = None
 
 
 class Predictor:
@@ -74,6 +75,7 @@ class Predictor:
                 subgraph_id=sample.subgraph_id,
                 predicted_target=float(prediction),
                 true_target=sample.target,
+                sample_id=sample.sample_id,
             )
             for sample, prediction in zip(
                 dataset.samples,

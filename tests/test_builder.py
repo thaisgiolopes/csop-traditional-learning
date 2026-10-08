@@ -171,6 +171,34 @@ def test_builder_creates_one_sample_per_subgraph():
     assert len(samples) == 3
 
 
+def test_builder_uses_supplied_subgraphs_without_regenerating():
+    graph = FakeGraph("G")
+    subgraphs = [FakeGraph("S1"), FakeGraph("S2")]
+    builder, _, generator, _, _ = create_builder(
+        graph=graph,
+        subgraphs=subgraphs,
+        features=[FakeFeature("num_vertices", FeatureLevel.GRAPH)],
+        global_results={"num_vertices": 10},
+        local_results={subgraph: {} for subgraph in subgraphs},
+        objective_values={subgraphs[0]: 1.0, subgraphs[1]: 2.0},
+    )
+    generator.generate = lambda unused_graph: (_ for _ in ()).throw(
+        AssertionError("preselected subgraphs must not be regenerated")
+    )
+
+    samples = builder.build(
+        graph_id="graph_001",
+        candidate_subgraphs=subgraphs,
+        sample_ids=["SMP_001", "SMP_002"],
+    )
+
+    assert [sample.sample_id for sample in samples] == [
+        "SMP_001",
+        "SMP_002",
+    ]
+    assert [sample.subgraph_id for sample in samples] == [0, 1]
+
+
 def test_builder_preserves_graph_and_subgraph_ids():
     """
     Test that graph_id and generated subgraph_id values are correctly
