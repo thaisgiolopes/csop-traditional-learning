@@ -1,4 +1,5 @@
 from collections.abc import Collection
+import hashlib
 from typing import Optional
 
 import networkx as nx
@@ -115,3 +116,44 @@ class NetworkXSubgraphGenerator(SubgraphGenerator):
             candidates.append(candidate_graph)
 
         return candidates
+
+    def generate_at_index(self, graph: Graph, index: int) -> Graph | None:
+        """Generate the deterministic candidate at a stable sequence index.
+
+        Each index gets an independently derived NetworkX seed. The result
+        therefore does not depend on how many candidates a caller requested
+        in an earlier batch.
+        """
+        if not isinstance(graph, Graph):
+            raise ValueError("graph must be a Graph instance.")
+        if isinstance(index, bool) or not isinstance(index, int) or index < 0:
+            raise ValueError("index must be a non-negative integer.")
+
+        networkx_graph = graph.networkx_graph
+        if networkx_graph.number_of_nodes() == 0:
+            return None
+
+        seed_material = f"{self._seed!r}:{index}".encode("utf-8")
+        derived_seed = int.from_bytes(
+            hashlib.sha256(seed_material).digest()[:4],
+            byteorder="big",
+        )
+        paths = nx.generate_random_paths(
+            networkx_graph,
+            sample_size=1,
+            path_length=self._path_length,
+            seed=derived_seed,
+        )
+        path = next(iter(paths), None)
+        if not path:
+            return None
+
+        vertex_set = frozenset(path)
+        candidate = networkx_graph.subgraph(vertex_set)
+        if not nx.is_connected(candidate):
+            return None
+
+        return Graph(
+            vertices=candidate.nodes,
+            edges=candidate.edges,
+        )

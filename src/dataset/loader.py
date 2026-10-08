@@ -20,6 +20,7 @@ class DatasetLoader:
         "subgraph_id",
         "target",
     }
+    OPTIONAL_COLUMNS = {"sample_id"}
 
     def __init__(self, dataset_path: Path | str):
         """
@@ -78,7 +79,7 @@ class DatasetLoader:
         feature_names = [
             column
             for column in dataframe.columns
-            if column not in self.REQUIRED_COLUMNS
+            if column not in self.REQUIRED_COLUMNS | self.OPTIONAL_COLUMNS
         ]
 
         samples = [
@@ -90,6 +91,12 @@ class DatasetLoader:
                     for feature_name in feature_names
                 },
                 target=row["target"],
+                sample_id=(
+                    None
+                    if "sample_id" not in dataframe.columns
+                    or pd.isna(row["sample_id"])
+                    else str(row["sample_id"])
+                ),
             )
             for _, row in dataframe.iterrows()
         ]

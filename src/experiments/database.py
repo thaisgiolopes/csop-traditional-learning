@@ -3,6 +3,8 @@ from datetime import datetime, timezone
 import math
 from pathlib import Path
 import sqlite3
+import json
+from typing import Any, Sequence
 
 
 def _utc_now() -> str:
@@ -105,6 +107,42 @@ class EvaluationRecord:
     experiment_id: str
     metric_name: str
     metric_value: float
+
+
+@dataclass(frozen=True)
+class SampleRecord:
+    """One globally stored candidate-subgraph structure."""
+
+    sample_id: str
+    graph_id: str
+    graph_fingerprint: str
+    vertices: list[Any]
+    edges: list[list[Any]]
+    compatibility_key: str
+    sequence_index: int
+    generation_metadata: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class ExperimentSampleRecord:
+    """Association between an experiment and one shared sample."""
+
+    experiment_id: str
+    sample_id: str
+    position: int
+    origin: str
+
+
+@dataclass(frozen=True)
+class SampleRequestRecord:
+    """Sample request and reuse/generation counts for an experiment."""
+
+    experiment_id: str
+    compatibility_key: str
+    requested_count: int
+    reused_count: int
+    generated_count: int
+    total_available: int
 
 
 class ExperimentDatabase:
@@ -211,6 +249,65 @@ class ExperimentDatabase:
                     CHECK (length(trim(metric_name)) > 0),
                 metric_value REAL NOT NULL,
                 UNIQUE (experiment_id, metric_name),
+                FOREIGN KEY (experiment_id)
+                    REFERENCES experiments(experiment_id)
+                    ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS samples (
+                sample_id TEXT PRIMARY KEY
+                    CHECK (length(trim(sample_id)) > 0),
+                graph_id TEXT NOT NULL
+                    CHECK (length(trim(graph_id)) > 0),
+                graph_fingerprint TEXT NOT NULL
+                    CHECK (length(trim(graph_fingerprint)) > 0),
+                vertices_json TEXT NOT NULL,
+                edges_json TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS sample_generation_streams (
+                compatibility_key TEXT PRIMARY KEY
+                    CHECK (length(trim(compatibility_key)) > 0),
+                next_index INTEGER NOT NULL DEFAULT 0
+                    CHECK (next_index >= 0)
+            );
+
+            CREATE TABLE IF NOT EXISTS sample_generations (
+                compatibility_key TEXT NOT NULL,
+                sequence_index INTEGER NOT NULL CHECK (sequence_index >= 0),
+                sample_id TEXT NOT NULL,
+                generation_metadata_json TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                PRIMARY KEY (compatibility_key, sequence_index),
+                UNIQUE (compatibility_key, sample_id),
+                FOREIGN KEY (compatibility_key)
+                    REFERENCES sample_generation_streams(compatibility_key),
+                FOREIGN KEY (sample_id)
+                    REFERENCES samples(sample_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS experiment_samples (
+                experiment_id TEXT NOT NULL,
+                sample_id TEXT NOT NULL,
+                position INTEGER NOT NULL CHECK (position >= 0),
+                origin TEXT NOT NULL CHECK (origin IN ('reused', 'generated')),
+                PRIMARY KEY (experiment_id, sample_id),
+                UNIQUE (experiment_id, position),
+                FOREIGN KEY (experiment_id)
+                    REFERENCES experiments(experiment_id)
+                    ON DELETE CASCADE,
+                FOREIGN KEY (sample_id)
+                    REFERENCES samples(sample_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS experiment_sample_requests (
+                experiment_id TEXT PRIMARY KEY,
+                compatibility_key TEXT NOT NULL,
+                requested_count INTEGER NOT NULL CHECK (requested_count > 0),
+                reused_count INTEGER NOT NULL CHECK (reused_count >= 0),
+                generated_count INTEGER NOT NULL CHECK (generated_count >= 0),
+                total_available INTEGER NOT NULL CHECK (total_available >= 0),
                 FOREIGN KEY (experiment_id)
                     REFERENCES experiments(experiment_id)
                     ON DELETE CASCADE
@@ -482,6 +579,271 @@ class ExperimentDatabase:
             ).fetchone()
 
         return self._record(EvaluationRecord, row)
+
+    def reserve_sample_indices(
+        self,
+        compatibility_key: str,
+        count: int,
+    ) -> range:
+        """Atomically reserve unique deterministic indices in one stream."""
+        _require_text(compatibility_key, "compatibility_key")
+        if isinstance(count, bool) or not isinstance(count, int) or count <= 0:
+            raise ValueError("count must be a positive integer.")
+
+        self._ensure_open()
+        try:
+            self._connection.execute("BEGIN IMMEDIATE")
+            self._connection.execute(
+                """INSERT OR IGNORE INTO sample_generation_streams
+                   (compatibility_key, next_index) VALUES (?, 0)""",
+                (compatibility_key,),
+            )
+            row = self._connection.execute(
+                """SELECT next_index FROM sample_generation_streams
+                   WHERE compatibility_key = ?""",
+                (compatibility_key,),
+            ).fetchone()
+            start = int(row["next_index"])
+            self._connection.execute(
+                """UPDATE sample_generation_streams SET next_index = ?
+                   WHERE compatibility_key = ?""",
+                (start + count, compatibility_key),
+            )
+            self._connection.commit()
+        except BaseException:
+            self._connection.rollback()
+            raise
+
+        return range(start, start + count)
+
+    def register_generated_sample(
+        self,
+        *,
+        sample_id: str,
+        graph_id: str,
+        graph_fingerprint: str,
+        structure: dict[str, Any],
+        compatibility_key: str,
+        sequence_index: int,
+        generation_metadata: dict[str, Any],
+    ) -> bool:
+        """Persist one structural sample and its generating sequence entry.
+
+        Returns True only when this compatibility stream gained a new unique
+        sample. The cache stores subgraph structure, not features or targets.
+        """
+        for value, name in (
+            (sample_id, "sample_id"),
+            (graph_id, "graph_id"),
+            (graph_fingerprint, "graph_fingerprint"),
+            (compatibility_key, "compatibility_key"),
+        ):
+            _require_text(value, name)
+        if isinstance(sequence_index, bool) or not isinstance(
+            sequence_index, int
+        ) or sequence_index < 0:
+            raise ValueError("sequence_index must be a non-negative integer.")
+        if set(structure) != {"vertices", "edges"}:
+            raise ValueError("structure must contain vertices and edges.")
+
+        vertices_json = json.dumps(
+            structure["vertices"],
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        )
+        edges_json = json.dumps(
+            structure["edges"],
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        )
+        metadata_json = json.dumps(
+            generation_metadata,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        )
+
+        self._ensure_open()
+        with self._connection:
+            self._connection.execute(
+                """INSERT OR IGNORE INTO samples
+                   (sample_id, graph_id, graph_fingerprint, vertices_json,
+                    edges_json, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (
+                    sample_id,
+                    graph_id,
+                    graph_fingerprint,
+                    vertices_json,
+                    edges_json,
+                    _utc_now(),
+                ),
+            )
+            stored = self._connection.execute(
+                """SELECT graph_fingerprint, vertices_json, edges_json
+                   FROM samples WHERE sample_id = ?""",
+                (sample_id,),
+            ).fetchone()
+            if (
+                stored["graph_fingerprint"] != graph_fingerprint
+                or stored["vertices_json"] != vertices_json
+                or stored["edges_json"] != edges_json
+            ):
+                raise ValueError("Sample identity collision detected.")
+
+            cursor = self._connection.execute(
+                """INSERT OR IGNORE INTO sample_generations
+                   (compatibility_key, sequence_index, sample_id,
+                    generation_metadata_json, created_at)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (
+                    compatibility_key,
+                    sequence_index,
+                    sample_id,
+                    metadata_json,
+                    _utc_now(),
+                ),
+            )
+
+        return cursor.rowcount == 1
+
+    def get_compatible_samples(
+        self,
+        compatibility_key: str,
+        limit: int | None = None,
+    ) -> list[SampleRecord]:
+        """Return unique samples in deterministic generation order."""
+        _require_text(compatibility_key, "compatibility_key")
+        if limit is not None and (
+            isinstance(limit, bool) or not isinstance(limit, int) or limit < 0
+        ):
+            raise ValueError("limit must be a non-negative integer or None.")
+
+        self._ensure_open()
+        query = """SELECT s.sample_id, s.graph_id, s.graph_fingerprint,
+                          s.vertices_json, s.edges_json,
+                          g.compatibility_key, g.sequence_index,
+                          g.generation_metadata_json
+                   FROM sample_generations AS g
+                   JOIN samples AS s ON s.sample_id = g.sample_id
+                   WHERE g.compatibility_key = ?
+                   ORDER BY g.sequence_index, s.sample_id"""
+        parameters: tuple[Any, ...] = (compatibility_key,)
+        if limit is not None:
+            query += " LIMIT ?"
+            parameters += (limit,)
+        rows = self._connection.execute(query, parameters).fetchall()
+
+        return [
+            SampleRecord(
+                sample_id=row["sample_id"],
+                graph_id=row["graph_id"],
+                graph_fingerprint=row["graph_fingerprint"],
+                vertices=json.loads(row["vertices_json"]),
+                edges=json.loads(row["edges_json"]),
+                compatibility_key=row["compatibility_key"],
+                sequence_index=row["sequence_index"],
+                generation_metadata=json.loads(
+                    row["generation_metadata_json"]
+                ),
+            )
+            for row in rows
+        ]
+
+    def associate_samples_with_experiment(
+        self,
+        *,
+        experiment_id: str,
+        compatibility_key: str,
+        requested_count: int,
+        samples: Sequence[tuple[str, str]],
+        total_available: int,
+    ) -> SampleRequestRecord:
+        """Link selected shared samples and persist request accounting."""
+        _require_text(experiment_id, "experiment_id")
+        _require_text(compatibility_key, "compatibility_key")
+        if requested_count <= 0 or len(samples) != requested_count:
+            raise ValueError(
+                "The association count must equal the positive requested count."
+            )
+        if total_available < requested_count:
+            raise ValueError("total_available is below requested_count.")
+        if len({sample_id for sample_id, _ in samples}) != len(samples):
+            raise ValueError("An experiment cannot associate duplicate samples.")
+        if any(origin not in {"reused", "generated"} for _, origin in samples):
+            raise ValueError("Sample origin must be reused or generated.")
+
+        reused_count = sum(origin == "reused" for _, origin in samples)
+        generated_count = requested_count - reused_count
+        self._ensure_open()
+        with self._connection:
+            self._connection.executemany(
+                """INSERT INTO experiment_samples
+                   (experiment_id, sample_id, position, origin)
+                   VALUES (?, ?, ?, ?)""",
+                [
+                    (experiment_id, sample_id, position, origin)
+                    for position, (sample_id, origin) in enumerate(samples)
+                ],
+            )
+            self._connection.execute(
+                """INSERT INTO experiment_sample_requests
+                   (experiment_id, compatibility_key, requested_count,
+                    reused_count, generated_count, total_available)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (
+                    experiment_id,
+                    compatibility_key,
+                    requested_count,
+                    reused_count,
+                    generated_count,
+                    total_available,
+                ),
+            )
+
+        return SampleRequestRecord(
+            experiment_id=experiment_id,
+            compatibility_key=compatibility_key,
+            requested_count=requested_count,
+            reused_count=reused_count,
+            generated_count=generated_count,
+            total_available=total_available,
+        )
+
+    def get_experiment_samples(
+        self,
+        experiment_id: str,
+    ) -> list[ExperimentSampleRecord]:
+        """Return samples associated with an experiment in requested order."""
+        self._ensure_open()
+        rows = self._connection.execute(
+            """SELECT experiment_id, sample_id, position, origin
+               FROM experiment_samples WHERE experiment_id = ?
+               ORDER BY position""",
+            (experiment_id,),
+        ).fetchall()
+        return [self._record(ExperimentSampleRecord, row) for row in rows]
+
+    def get_experiment_sample_request(
+        self,
+        experiment_id: str,
+    ) -> SampleRequestRecord:
+        """Return requested/reused/generated sample counts for an experiment."""
+        self._ensure_open()
+        row = self._connection.execute(
+            """SELECT experiment_id, compatibility_key, requested_count,
+                      reused_count, generated_count, total_available
+               FROM experiment_sample_requests WHERE experiment_id = ?""",
+            (experiment_id,),
+        ).fetchone()
+        if row is None:
+            raise KeyError(f"No sample request for experiment {experiment_id}.")
+        return self._record(SampleRequestRecord, row)
 
     def get_experiment(self, experiment_id: str) -> ExperimentRecord:
         """Return one experiment or raise KeyError if it is absent."""
