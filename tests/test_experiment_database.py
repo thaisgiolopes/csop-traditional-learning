@@ -128,6 +128,78 @@ def test_register_evaluation(database):
 
     assert evaluation.metric_name == "mae"
     assert database.get_experiment_evaluations("EXP_001") == [evaluation]
+    [metric] = database.get_experiment_metrics("EXP_001")
+    assert metric.metric_id == "LEGACY_1"
+    assert metric.metric_name == "mae"
+    assert metric.split is None
+    assert metric.stage_id is None
+
+
+def test_register_multiple_metrics_for_splits_and_stage(database):
+    create_experiment(database)
+    stage = database.register_stage(
+        "EXP_001",
+        "evaluation",
+        "completed",
+    )
+    metrics = [
+        database.register_metric(
+            experiment_id="EXP_001",
+            stage_id=stage.stage_id,
+            metric_name="mae",
+            split=split,
+            metric_value=value,
+        )
+        for split, value in (
+            ("train", 0.1),
+            ("validation", 0.2),
+            ("test", 0.3),
+        )
+    ]
+
+    assert [metric.split for metric in metrics] == [
+        "train", "validation", "test"
+    ]
+    assert all(metric.stage_id == stage.stage_id for metric in metrics)
+    assert database.get_experiment_metrics("EXP_001") == metrics
+
+
+def test_metric_rejects_stage_from_another_experiment(database):
+    create_experiment(database, "EXP_001")
+    create_experiment(database, "EXP_002")
+    stage = database.register_stage("EXP_001", "evaluation", "completed")
+
+    with pytest.raises(ValueError, match="belonging to experiment_id"):
+        database.register_metric(
+            experiment_id="EXP_002",
+            stage_id=stage.stage_id,
+            metric_name="mae",
+            metric_value=0.1,
+        )
+
+
+def test_legacy_evaluations_migrate_idempotently(tmp_path):
+    database_path = tmp_path / "legacy.sqlite3"
+    database = ExperimentDatabase(database_path)
+    create_experiment(database, "EXP_OLD")
+    database.register_evaluation("EXP_OLD", "validation_mae", 0.125)
+    database._connection.execute("DROP TABLE metrics")
+    database._connection.commit()
+    database.close()
+
+    migrated = ExperimentDatabase(database_path)
+    [metric] = migrated.get_experiment_metrics("EXP_OLD")
+    assert metric.metric_id == "LEGACY_1"
+    assert metric.metric_name == "mae"
+    assert metric.split == "validation"
+    assert metric.metric_value == 0.125
+    migrated.close()
+
+    reopened = ExperimentDatabase(database_path)
+    try:
+        assert len(reopened.get_experiment_metrics("EXP_OLD")) == 1
+    finally:
+        reopened.close()
 
 
 def test_records_enforce_experiment_foreign_keys(database):

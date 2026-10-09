@@ -201,6 +201,24 @@ def test_evaluation_registration(database, tmp_path):
     assert database.get_experiment_evaluations("EXP_001") == [record]
 
 
+def test_metric_registration_uses_completed_stage_handle(database, tmp_path):
+    tracker = make_tracker(database, tmp_path)
+    with tracker.track_stage("validation_evaluation") as stage:
+        pass
+
+    metric = tracker.register_metric(
+        "mae",
+        0.125,
+        stage_id=stage.stage_id,
+        split="validation",
+    )
+
+    assert stage.stage_id is not None
+    assert metric.stage_id == stage.stage_id
+    assert metric.split == "validation"
+    assert database.get_experiment_metrics("EXP_001") == [metric]
+
+
 def test_tracker_reuses_timer_and_memory_monitor(
     database,
     tmp_path,

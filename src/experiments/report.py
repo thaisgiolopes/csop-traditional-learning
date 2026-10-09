@@ -5,6 +5,9 @@ import json
 import os
 from pathlib import Path
 from typing import Any, Iterable
+
+import pandas as pd
+
 from .database import (
     ExperimentDatabase,
     ExperimentRecord,
@@ -101,6 +104,15 @@ XLSX_SHEETS = {
         "metric_name",
         "metric_value",
     ),
+    "Metrics": (
+        "metric_id",
+        "experiment_id",
+        "stage_id",
+        "metric_name",
+        "split",
+        "metric_value",
+        "recorded_at",
+    ),
     "Predictions": (
         "experiment_id",
         "prediction_id",
@@ -141,7 +153,174 @@ def _total_duration_seconds(
 
 
 class ExperimentReport:
-    """Generate tabular reports from records in the experiment database."""
+    """Project persisted experiment records into CSV, XLSX, and DataFrames."""
+
+    DATAFRAME_COLUMNS = {
+        "experiments": (
+            "experiment_id", "name", "description", "status", "created_at",
+            "started_at", "finished_at", "configuration_path",
+            "environment_path",
+        ),
+        "stages": (
+            "stage_id", "experiment_id", "stage_name", "status",
+            "started_at", "finished_at", "duration_seconds",
+            "memory_before_bytes", "memory_after_bytes", "memory_delta_bytes",
+        ),
+        "metrics": (
+            "metric_id", "experiment_id", "stage_id", "metric_name",
+            "split", "metric_value", "recorded_at",
+        ),
+    }
+
+    @staticmethod
+    def _typed_frame(
+        frame: pd.DataFrame,
+        table: str,
+    ) -> pd.DataFrame:
+        """Apply a stable nullable dtype contract to one tracking frame."""
+        frame = frame.reindex(columns=ExperimentReport.DATAFRAME_COLUMNS[table])
+        string_columns = {
+            "experiments": (
+                "experiment_id", "name", "description", "status",
+                "configuration_path", "environment_path",
+            ),
+            "stages": ("experiment_id", "stage_name", "status"),
+            "metrics": (
+                "metric_id", "experiment_id", "metric_name", "split",
+            ),
+        }[table]
+        for column in string_columns:
+            frame[column] = frame[column].astype("string")
+
+        datetime_columns = {
+            "experiments": ("created_at", "started_at", "finished_at"),
+            "stages": ("started_at", "finished_at"),
+            "metrics": ("recorded_at",),
+        }[table]
+        for column in datetime_columns:
+            frame[column] = pd.to_datetime(
+                frame[column],
+                utc=True,
+                errors="coerce",
+            ).astype("datetime64[ns, UTC]")
+
+        for column in ("stage_id", "memory_before_bytes", "memory_after_bytes", "memory_delta_bytes"):
+            if column in frame:
+                frame[column] = pd.array(frame[column], dtype="Int64")
+        if "duration_seconds" in frame:
+            frame["duration_seconds"] = pd.array(
+                frame["duration_seconds"], dtype="Float64"
+            )
+        if "metric_value" in frame:
+            frame["metric_value"] = pd.array(
+                frame["metric_value"], dtype="Float64"
+            )
+        return frame
+
+    def to_dataframes(
+        self,
+        experiment_ids: str | Iterable[str] | None = None,
+    ) -> dict[str, pd.DataFrame]:
+        """Return read-only projections named experiments, stages, metrics.
+
+        Timestamps use UTC pandas datetime types; optional values use pandas
+        nullable string, integer, and floating dtypes. Configuration content
+        remains normalized in the existing JSON artifact and is referenced
+        here by its path to avoid duplicating it.
+        """
+        if experiment_ids is None:
+            selected_ids = None
+            experiment_records = self._database.list_experiments()
+        else:
+            requested = (
+                [experiment_ids]
+                if isinstance(experiment_ids, str)
+                else list(dict.fromkeys(experiment_ids))
+            )
+            selected_ids = set(requested)
+            experiment_records = [
+                self._database.get_experiment(experiment_id)
+                for experiment_id in requested
+            ]
+
+        experiments = pd.DataFrame(
+            [asdict(record) for record in experiment_records]
+        )
+        stage_records = self._database.list_stages()
+        metric_records = self._database.get_experiment_metrics()
+        if selected_ids is not None:
+            stage_records = [
+                record for record in stage_records
+                if record.experiment_id in selected_ids
+            ]
+            metric_records = [
+                record for record in metric_records
+                if record.experiment_id in selected_ids
+            ]
+
+        return {
+            "experiments": self._typed_frame(experiments, "experiments"),
+            "stages": self._typed_frame(
+                pd.DataFrame([asdict(record) for record in stage_records]),
+                "stages",
+            ),
+            "metrics": self._typed_frame(
+                pd.DataFrame([asdict(record) for record in metric_records]),
+                "metrics",
+            ),
+        }
+
+    def export_dataframes_xlsx(
+        self,
+        path: str | Path,
+        experiment_ids: str | Iterable[str] | None = None,
+        *,
+        overwrite: bool = False,
+    ) -> Path:
+        """Export the three tracking frames to separate XLSX worksheets.
+
+        Existing files are not overwritten unless explicitly requested.
+        Excel cannot store timezone-aware datetimes, so timestamps are
+        serialized as ISO-8601 UTC strings in the workbook.
+        """
+        output_path = Path(path)
+        if output_path.exists() and not overwrite:
+            raise FileExistsError(
+                f"Refusing to overwrite existing workbook: {output_path}"
+            )
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        frames = self.to_dataframes(experiment_ids)
+        with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
+            for name, frame in frames.items():
+                export_frame = frame.copy()
+                for column in export_frame.columns:
+                    if isinstance(export_frame[column].dtype, pd.DatetimeTZDtype):
+                        export_frame[column] = export_frame[column].map(
+                            lambda value: (
+                                value.isoformat().replace("+00:00", "Z")
+                                if pd.notna(value)
+                                else None
+                            )
+                        )
+                export_frame.to_excel(
+                    writer,
+                    sheet_name=name.title(),
+                    index=False,
+                )
+        return output_path
+
+    @classmethod
+    def read_dataframes_xlsx(cls, path: str | Path) -> dict[str, pd.DataFrame]:
+        """Read the tracking XLSX tabs and restore the documented dtypes."""
+        workbook = pd.read_excel(path, sheet_name=None, engine="openpyxl")
+        expected = {name.title(): name for name in cls.DATAFRAME_COLUMNS}
+        missing = set(expected) - set(workbook)
+        if missing:
+            raise ValueError(f"Workbook is missing tracking sheets: {sorted(missing)}")
+        return {
+            table: cls._typed_frame(workbook[sheet], table)
+            for sheet, table in expected.items()
+        }
 
     def __init__(
         self, 
@@ -274,6 +453,18 @@ class ExperimentReport:
             }
             for item in evaluations
         ]
+        metric_rows = [
+            {
+                "metric_id": item.metric_id,
+                "experiment_id": item.experiment_id,
+                "stage_id": item.stage_id,
+                "metric_name": item.metric_name,
+                "split": item.split,
+                "metric_value": item.metric_value,
+                "recorded_at": item.recorded_at,
+            }
+            for item in self._database.get_experiment_metrics(experiment_id)
+        ]
         prediction_rows = [
             {
                 "experiment_id": item.experiment_id,
@@ -319,6 +510,12 @@ class ExperimentReport:
             XLSX_SHEETS["Evaluations"],
             experiment_id,
             evaluation_rows,
+        )
+        self._replace_experiment_rows(
+            worksheets["Metrics"],
+            XLSX_SHEETS["Metrics"],
+            experiment_id,
+            metric_rows,
         )
         self._replace_experiment_rows(
             worksheets["Predictions"],
@@ -532,6 +729,12 @@ class ExperimentReport:
             "evaluations": [
                 asdict(record)
                 for record in self._database.get_experiment_evaluations(
+                    experiment_id
+                )
+            ],
+            "metrics": [
+                asdict(record)
+                for record in self._database.get_experiment_metrics(
                     experiment_id
                 )
             ],

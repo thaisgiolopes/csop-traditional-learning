@@ -5,7 +5,7 @@ from typing import Any
 import secrets
 from .artifact_store import ArtifactStore
 from .config import ExperimentConfig
-from .database import ExperimentDatabase
+from .database import ExperimentDatabase, MetricRecord
 from .environment import EnvironmentMetadata
 from .logger import create_experiment_logger
 from .resource_monitor import ProcessMemoryMonitor
@@ -247,6 +247,22 @@ class ExperimentManager:
     def register_evaluation(self, metric_name: str, metric_value: float):
         """Register one scalar evaluation metric through the tracker."""
         return self.tracker.register_evaluation(metric_name, metric_value)
+
+    def register_metric(
+        self,
+        metric_name: str,
+        metric_value: float,
+        *,
+        stage_id: int | None = None,
+        split: str | None = None,
+    ) -> MetricRecord:
+        """Register a metric with optional stage and split associations."""
+        return self.tracker.register_metric(
+            metric_name,
+            metric_value,
+            stage_id=stage_id,
+            split=split,
+        )
 
     @staticmethod
     def _utc_now() -> str:

@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from types import TracebackType
@@ -10,6 +11,7 @@ from .database import (
     ArtifactRecord,
     EvaluationRecord,
     ExperimentDatabase,
+    MetricRecord,
     PredictionRecord,
     StageRecord,
 )
@@ -25,6 +27,18 @@ def _utc_now() -> str:
         .isoformat(timespec="microseconds")
         .replace("+00:00", "Z")
     )
+
+
+@dataclass
+class StageTrackingHandle:
+    """Handle populated with its persisted record when a stage exits."""
+
+    record: StageRecord | None = None
+
+    @property
+    def stage_id(self) -> int | None:
+        """Return the database stage ID once the context has exited."""
+        return self.record.stage_id if self.record is not None else None
 
 
 class ExperimentTracker:
@@ -50,7 +64,7 @@ class ExperimentTracker:
         self._timer_factory = timer_factory
 
     @contextmanager
-    def track_stage(self, stage_name: str) -> Iterator[None]:
+    def track_stage(self, stage_name: str) -> Iterator[StageTrackingHandle]:
         """Measure and register one successful or failed experiment stage."""
         if not isinstance(stage_name, str) or not stage_name.strip():
             raise ValueError("stage_name must be a non-empty string.")
@@ -61,12 +75,13 @@ class ExperimentTracker:
         status = "failed"
         stage_exception: BaseException | None = None
         stage_traceback: TracebackType | None = None
+        handle = StageTrackingHandle()
 
         try:
             with timer:
                 with self._memory_monitor.measure(stage_name) as measurement:
                     self._log("info", "Stage started: %s", stage_name)
-                    yield
+                    yield handle
             status = "completed"
         except BaseException as exc:
             stage_exception = exc
@@ -104,7 +119,7 @@ class ExperimentTracker:
             )
 
             try:
-                self._database.register_stage(**stage_record)
+                handle.record = self._database.register_stage(**stage_record)
             except BaseException as registration_error:
                 if stage_exception is None:
                     raise
@@ -180,6 +195,23 @@ class ExperimentTracker:
         return self._database.register_evaluation(
             experiment_id=self.experiment_id,
             metric_name=metric_name,
+            metric_value=metric_value,
+        )
+
+    def register_metric(
+        self,
+        metric_name: str,
+        metric_value: float,
+        *,
+        stage_id: int | None = None,
+        split: str | None = None,
+    ) -> MetricRecord:
+        """Register one metric with optional stage and data-split metadata."""
+        return self._database.register_metric(
+            experiment_id=self.experiment_id,
+            stage_id=stage_id,
+            metric_name=metric_name,
+            split=split,
             metric_value=metric_value,
         )
 

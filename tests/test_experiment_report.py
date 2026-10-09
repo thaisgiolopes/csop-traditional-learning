@@ -67,6 +67,93 @@ def test_update_xlsx_writes_stage_artifact_prediction_and_metric_sheets(
     workbook.close()
 
 
+def test_tracking_dataframes_have_explicit_schema_and_nullable_dtypes(
+    database,
+    tmp_path,
+):
+    add_experiment(database, tmp_path, "EXP_001")
+    add_experiment(database, tmp_path, "EXP_002")
+    stage = database.register_stage("EXP_001", "validation", "completed")
+    database.register_metric(
+        experiment_id="EXP_001",
+        stage_id=stage.stage_id,
+        metric_name="mae",
+        split="validation",
+        metric_value=0.125,
+    )
+    report = ExperimentReport(database)
+
+    frames = report.to_dataframes()
+
+    assert set(frames) == {"experiments", "stages", "metrics"}
+    for table, frame in frames.items():
+        assert list(frame.columns) == list(report.DATAFRAME_COLUMNS[table])
+    assert str(frames["experiments"]["experiment_id"].dtype) == "string"
+    assert str(frames["experiments"]["created_at"].dtype) == (
+        "datetime64[ns, UTC]"
+    )
+    assert str(frames["stages"]["stage_id"].dtype) == "Int64"
+    assert str(frames["metrics"]["metric_value"].dtype) == "Float64"
+    assert frames["metrics"].iloc[0]["stage_id"] == stage.stage_id
+
+    filtered = report.to_dataframes("EXP_001")
+    assert filtered["experiments"]["experiment_id"].tolist() == ["EXP_001"]
+    assert set(filtered["stages"]["experiment_id"].dropna()) == {"EXP_001"}
+    assert set(filtered["metrics"]["experiment_id"].dropna()) == {"EXP_001"}
+
+
+def test_empty_dataframes_keep_declared_columns_and_types(database):
+    frames = ExperimentReport(database).to_dataframes()
+
+    assert all(frame.empty for frame in frames.values())
+    assert list(frames["metrics"].columns) == list(
+        ExperimentReport.DATAFRAME_COLUMNS["metrics"]
+    )
+    assert str(frames["metrics"]["stage_id"].dtype) == "Int64"
+
+
+def test_tracking_dataframe_xlsx_round_trip_preserves_metric_links(
+    database,
+    tmp_path,
+):
+    add_experiment(database, tmp_path, "EXP_001")
+    stage = database.register_stage("EXP_001", "test_evaluation", "completed")
+    database.register_metric(
+        experiment_id="EXP_001",
+        stage_id=stage.stage_id,
+        metric_name="rmse",
+        split="test",
+        metric_value=0.375,
+    )
+    report = ExperimentReport(database)
+    output_path = tmp_path / "tracking.xlsx"
+    experiments_before = database.list_experiments()
+    stages_before = database.list_stages()
+    metrics_before = database.get_experiment_metrics()
+
+    report.to_dataframes()
+    report.export_dataframes_xlsx(output_path)
+    frames = ExperimentReport.read_dataframes_xlsx(output_path)
+
+    assert set(frames) == {"experiments", "stages", "metrics"}
+    metric = frames["metrics"].iloc[0]
+    assert metric["experiment_id"] == "EXP_001"
+    assert metric["stage_id"] == stage.stage_id
+    assert metric["metric_name"] == "rmse"
+    assert metric["split"] == "test"
+    assert metric["metric_value"] == pytest.approx(0.375)
+    assert str(frames["metrics"]["recorded_at"].dtype) == (
+        "datetime64[ns, UTC]"
+    )
+
+    with pytest.raises(FileExistsError):
+        report.export_dataframes_xlsx(output_path)
+
+    assert database.list_experiments() == experiments_before
+    assert database.list_stages() == stages_before
+    assert database.get_experiment_metrics() == metrics_before
+
+
 @pytest.fixture
 def database(tmp_path):
     repository = ExperimentDatabase(tmp_path / "registry.sqlite3")
