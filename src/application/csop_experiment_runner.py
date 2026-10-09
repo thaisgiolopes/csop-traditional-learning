@@ -542,16 +542,18 @@ def run_experiment(
                         "text/plain",
                     )
 
-            with experiment.track_stage("train_validation_test_evaluation"):
-                datasets_by_split = {
-                    "train": train_dataset,
-                    "validation": validation_dataset,
-                    "test": test_dataset,
-                }
-                results_by_split = {}
-                metrics_by_split = {}
+            datasets_by_split = {
+                "train": train_dataset,
+                "validation": validation_dataset,
+                "test": test_dataset,
+            }
+            results_by_split = {}
+            metrics_by_split = {}
 
-                for split_name, split_part in datasets_by_split.items():
+            for split_name, split_part in datasets_by_split.items():
+                with experiment.track_stage(
+                    f"{split_name}_evaluation"
+                ) as stage:
                     result = PredictionPipeline(
                         model=trained_model,
                         dataset=split_part,
@@ -559,29 +561,45 @@ def run_experiment(
                         evaluator=Evaluator(),
                     ).run()
                     results_by_split[split_name] = result
+                    split_metrics = _metric_values(result.evaluation)
                     metrics_by_split[split_name] = {
                         "num_samples": result.evaluation.num_samples,
-                        "metrics": _metric_values(result.evaluation),
+                        "metrics": split_metrics,
                     }
 
-                test_result = results_by_split["test"]
-                predictions_path = experiment.artifact_store.save_text(
-                    "predictions",
-                    "predictions.csv",
-                    _predictions_to_csv(test_result.predictions),
-                )
-                experiment.register_artifact(
-                    "predictions",
-                    predictions_path.name,
-                    "text/csv",
-                )
+                for metric_name, metric_value in split_metrics.items():
+                    if metric_value is None:
+                        logger.warning(
+                            "Metric %s/%s is not finite and was not registered",
+                            split_name,
+                            metric_name,
+                        )
+                        continue
+                    experiment.register_metric(
+                        metric_name,
+                        metric_value,
+                        stage_id=stage.stage_id,
+                        split=split_name,
+                    )
 
-                metrics_path = _save_json(
-                    experiment,
-                    "evaluation",
-                    "metrics.json",
-                    metrics_by_split,
-                )
+            test_result = results_by_split["test"]
+            predictions_path = experiment.artifact_store.save_text(
+                "predictions",
+                "predictions.csv",
+                _predictions_to_csv(test_result.predictions),
+            )
+            experiment.register_artifact(
+                "predictions",
+                predictions_path.name,
+                "text/csv",
+            )
+
+            metrics_path = _save_json(
+                experiment,
+                "evaluation",
+                "metrics.json",
+                metrics_by_split,
+            )
 
             # Keep the existing prediction records scoped to the final test set.
             for prediction in test_result.predictions:
@@ -600,20 +618,6 @@ def run_experiment(
                     actual_value=actual,
                     prediction_error=error,
                 )
-
-            for split_name, split_result in metrics_by_split.items():
-                for metric_name, metric_value in split_result["metrics"].items():
-                    if metric_value is not None:
-                        experiment.register_evaluation(
-                            f"{split_name}_{metric_name}",
-                            metric_value,
-                        )
-                    else:
-                        logger.warning(
-                            "Metric %s_%s is not finite and was not registered",
-                            split_name,
-                            metric_name,
-                        )
 
             logger.info(
                 "Artifacts saved: dataset=%s predictions=%s metrics=%s",

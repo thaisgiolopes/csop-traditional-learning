@@ -5,6 +5,7 @@ from pathlib import Path
 import sqlite3
 import json
 from typing import Any, Sequence
+from uuid import uuid4
 
 
 def _utc_now() -> str:
@@ -107,6 +108,19 @@ class EvaluationRecord:
     experiment_id: str
     metric_name: str
     metric_value: float
+
+
+@dataclass(frozen=True)
+class MetricRecord:
+    """One scalar metric associated with an experiment and optional stage."""
+
+    metric_id: str
+    experiment_id: str
+    stage_id: int | None
+    metric_name: str
+    split: str | None
+    metric_value: float
+    recorded_at: str
 
 
 @dataclass(frozen=True)
@@ -254,6 +268,24 @@ class ExperimentDatabase:
                     ON DELETE CASCADE
             );
 
+            CREATE TABLE IF NOT EXISTS metrics (
+                metric_id TEXT PRIMARY KEY
+                    CHECK (length(trim(metric_id)) > 0),
+                experiment_id TEXT NOT NULL,
+                stage_id INTEGER,
+                metric_name TEXT NOT NULL
+                    CHECK (length(trim(metric_name)) > 0),
+                split TEXT,
+                metric_value REAL NOT NULL,
+                recorded_at TEXT NOT NULL,
+                FOREIGN KEY (experiment_id)
+                    REFERENCES experiments(experiment_id)
+                    ON DELETE CASCADE,
+                FOREIGN KEY (stage_id)
+                    REFERENCES stages(stage_id)
+                    ON DELETE SET NULL
+            );
+
             CREATE TABLE IF NOT EXISTS samples (
                 sample_id TEXT PRIMARY KEY
                     CHECK (length(trim(sample_id)) > 0),
@@ -314,7 +346,49 @@ class ExperimentDatabase:
             );
             """
         )
+        self._migrate_evaluations_to_metrics()
         self._connection.commit()
+
+    def _migrate_evaluations_to_metrics(self) -> None:
+        """Copy legacy evaluation rows to metrics, safely on every open."""
+        columns = {
+            row["name"]
+            for row in self._connection.execute(
+                "PRAGMA table_info(evaluations)"
+            )
+        }
+        if not {"evaluation_id", "experiment_id", "metric_name", "metric_value"} <= columns:
+            return
+
+        rows = self._connection.execute(
+            """SELECT evaluation_id, experiment_id, metric_name, metric_value
+               FROM evaluations ORDER BY evaluation_id"""
+        ).fetchall()
+        timestamp = _utc_now()
+        for row in rows:
+            metric_name = row["metric_name"]
+            split: str | None = None
+            base_name = metric_name
+            for known_split in ("train", "validation", "test"):
+                prefix = f"{known_split}_"
+                if metric_name.startswith(prefix):
+                    split = known_split
+                    base_name = metric_name[len(prefix):]
+                    break
+            self._connection.execute(
+                """INSERT OR IGNORE INTO metrics
+                   (metric_id, experiment_id, stage_id, metric_name, split,
+                    metric_value, recorded_at)
+                   VALUES (?, ?, NULL, ?, ?, ?, ?)""",
+                (
+                    f"LEGACY_{row['evaluation_id']}",
+                    row["experiment_id"],
+                    base_name,
+                    split,
+                    row["metric_value"],
+                    timestamp,
+                ),
+            )
 
     def close(self) -> None:
         """Close the SQLite connection."""
@@ -558,11 +632,23 @@ class ExperimentDatabase:
         metric_name: str,
         metric_value: float,
     ) -> EvaluationRecord:
-        """Register one scalar evaluation metric."""
+        """Register a legacy experiment-level evaluation metric.
+
+        New callers should use ``register_metric`` to record split and stage
+        associations. This adapter keeps existing consumers operational.
+        """
         _require_text(experiment_id, "experiment_id")
         _require_text(metric_name, "metric_name")
         _require_finite(metric_value, "metric_value")
 
+        split: str | None = None
+        base_name = metric_name
+        for known_split in ("train", "validation", "test"):
+            prefix = f"{known_split}_"
+            if metric_name.startswith(prefix):
+                split = known_split
+                base_name = metric_name[len(prefix):]
+                break
         self._ensure_open()
         with self._connection:
             cursor = self._connection.execute(
@@ -573,12 +659,106 @@ class ExperimentDatabase:
                 """,
                 (experiment_id, metric_name, metric_value),
             )
+            evaluation_id = int(cursor.lastrowid)
+            self._connection.execute(
+                """INSERT OR IGNORE INTO metrics
+                   (metric_id, experiment_id, stage_id, metric_name, split,
+                    metric_value, recorded_at)
+                   VALUES (?, ?, NULL, ?, ?, ?, ?)""",
+                (
+                    f"LEGACY_{evaluation_id}",
+                    experiment_id,
+                    base_name,
+                    split,
+                    metric_value,
+                    _utc_now(),
+                ),
+            )
             row = self._connection.execute(
                 "SELECT * FROM evaluations WHERE evaluation_id = ?",
                 (cursor.lastrowid,),
             ).fetchone()
 
         return self._record(EvaluationRecord, row)
+
+    def register_metric(
+        self,
+        *,
+        experiment_id: str,
+        metric_name: str,
+        metric_value: float,
+        stage_id: int | None = None,
+        split: str | None = None,
+        recorded_at: str | None = None,
+    ) -> MetricRecord:
+        """Register a metric without imposing uniqueness by metric name."""
+        _require_text(experiment_id, "experiment_id")
+        _require_text(metric_name, "metric_name")
+        _require_optional_text(split, "split")
+        _require_finite(metric_value, "metric_value")
+        if stage_id is not None:
+            _require_non_negative_int(stage_id, "stage_id")
+            self._ensure_open()
+            stage = self._connection.execute(
+                "SELECT experiment_id FROM stages WHERE stage_id = ?",
+                (stage_id,),
+            ).fetchone()
+            if stage is None or stage["experiment_id"] != experiment_id:
+                raise ValueError(
+                    "stage_id must identify a stage belonging to experiment_id."
+                )
+
+        timestamp = recorded_at or _utc_now()
+        _require_text(timestamp, "recorded_at")
+        metric_id = f"MET_{uuid4().hex}"
+        self._ensure_open()
+        with self._connection:
+            self._connection.execute(
+                """INSERT INTO metrics
+                   (metric_id, experiment_id, stage_id, metric_name, split,
+                    metric_value, recorded_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    metric_id,
+                    experiment_id,
+                    stage_id,
+                    metric_name,
+                    split,
+                    metric_value,
+                    timestamp,
+                ),
+            )
+            row = self._connection.execute(
+                "SELECT * FROM metrics WHERE metric_id = ?",
+                (metric_id,),
+            ).fetchone()
+        return self._record(MetricRecord, row)
+
+    def get_experiment_metrics(
+        self,
+        experiment_id: str | None = None,
+    ) -> list[MetricRecord]:
+        """Return metrics ordered by creation ID, optionally filtered."""
+        self._ensure_open()
+        if experiment_id is None:
+            rows = self._connection.execute(
+                "SELECT * FROM metrics ORDER BY rowid"
+            ).fetchall()
+        else:
+            rows = self._connection.execute(
+                """SELECT * FROM metrics WHERE experiment_id = ?
+                   ORDER BY rowid""",
+                (experiment_id,),
+            ).fetchall()
+        return [self._record(MetricRecord, row) for row in rows]
+
+    def list_stages(self) -> list[StageRecord]:
+        """Return all stages in stable database order."""
+        self._ensure_open()
+        rows = self._connection.execute(
+            "SELECT * FROM stages ORDER BY stage_id"
+        ).fetchall()
+        return [self._record(StageRecord, row) for row in rows]
 
     def reserve_sample_indices(
         self,
