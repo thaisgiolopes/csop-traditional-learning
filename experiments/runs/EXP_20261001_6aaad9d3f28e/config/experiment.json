@@ -23,7 +23,7 @@
     "graph_id": "integration_test_graph",
     "parameters": {
       "directed": false,
-      "format": "adjlist"
+      "format": "adjlists"
     },
     "path": "/home/Thais/IC/csop-traditional-learning/data/raw/graph_test",
     "source": null

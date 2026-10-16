@@ -11,7 +11,8 @@ class GraphLoader:
     """
 
     METADATA_FILENAME = "metadata"
-    ADJLIST_FILENAME = "adjlist"
+    ADJLIST_FILENAME = "adjlists"
+    LEGACY_ADJLIST_FILENAME = "adjlist"
 
     def __init__(self, instance_path):
         """
@@ -139,9 +140,14 @@ class GraphLoader:
             ValueError: If the file format or number of lines is invalid.
         """
         adjacency_path = self.instance_path / self.ADJLIST_FILENAME
-
         if not adjacency_path.exists():
-            raise FileNotFoundError(f"Adjacency-list file not found: {adjacency_path}")
+            adjacency_path = self.instance_path / self.LEGACY_ADJLIST_FILENAME
+        if not adjacency_path.exists():
+            raise FileNotFoundError(
+                "Adjacency-list file not found; expected either "
+                f"{self.instance_path / self.ADJLIST_FILENAME} or "
+                f"{self.instance_path / self.LEGACY_ADJLIST_FILENAME}"
+            )
 
         with adjacency_path.open("r", encoding="utf-8") as adjacency_file:
             lines = adjacency_file.read().splitlines()

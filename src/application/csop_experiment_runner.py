@@ -20,7 +20,19 @@ from src.evaluation.result import EvaluationResult
 from src.features.base import FeatureScope
 from src.features.engine import FeatureEngine
 from src.features.graph_features import NumEdgesFeature, NumVerticesFeature
-from src.features.node_features import DegreeFeature
+from src.features.node_features import (
+    AverageNeighborDegreeFeature,
+    BetweennessCentralityFeature,
+    ClosenessCentralityFeature,
+    DegreeFeature,
+    EigenvectorCentralityFeature,
+    KCoreNumberFeature,
+    LocalClusteringCoefficientFeature,
+    NormalizedDegreeFeature,
+    PageRankFeature,
+    SquareClusteringFeature,
+    TriangleCountFeature,
+)
 from src.features.pooling import (
     MaxPooling,
     MeanPooling,
@@ -52,23 +64,85 @@ from src.subgraphs.identity import (
     sample_identity,
 )
 
-def _build_feature_set(feature_set_id: str):
+def _build_feature_set(
+    feature_set_id: str,
+    enabled_features: list[str] | None = None,
+):
     """Resolve a configured feature-set ID to executable components."""
     if feature_set_id == "graph-size-and-local-degree-v1":
+        unknown_features = set(enabled_features or ()) - {"degree"}
+        if unknown_features:
+            raise ValueError(
+                "Unknown enabled features for this feature set: "
+                f"{sorted(unknown_features)!r}."
+            )
+        include_degree = enabled_features is None or "degree" in enabled_features
+        features = [NumVerticesFeature(), NumEdgesFeature()]
+        if include_degree:
+            features.append(DegreeFeature(scope=FeatureScope.LOCAL))
         feature_engine = FeatureEngine(
-            features=[
-                NumVerticesFeature(),
-                NumEdgesFeature(),
-                DegreeFeature(scope=FeatureScope.LOCAL),
-            ]
+            features=features
         )
-        pooling_strategies = {
-            "degree": (
+        pooling_strategies = {}
+        if include_degree:
+            pooling_strategies["degree"] = (
                 MeanPooling(),
                 MaxPooling(),
                 MinPooling(),
                 StdPooling(),
-            ),
+            )
+        return feature_engine, pooling_strategies
+
+    node_feature_scopes = {
+        "graph-size-and-node-structure-local-v1": FeatureScope.LOCAL,
+        "graph-size-and-node-structure-global-v1": FeatureScope.GLOBAL,
+    }
+    if feature_set_id in node_feature_scopes:
+        scope = node_feature_scopes[feature_set_id]
+        available_node_features = [
+            PageRankFeature(scope=scope),
+            BetweennessCentralityFeature(scope=scope),
+            ClosenessCentralityFeature(scope=scope),
+            EigenvectorCentralityFeature(scope=scope),
+            KCoreNumberFeature(scope=scope),
+            TriangleCountFeature(scope=scope),
+            LocalClusteringCoefficientFeature(scope=scope),
+            SquareClusteringFeature(scope=scope),
+            AverageNeighborDegreeFeature(scope=scope),
+            NormalizedDegreeFeature(scope=scope),
+        ]
+        available_feature_ids = {
+            feature.name.removesuffix("_local").removesuffix("_global")
+            for feature in available_node_features
+        }
+        requested_feature_ids = (
+            available_feature_ids
+            if enabled_features is None
+            else set(enabled_features)
+        )
+        unknown_features = requested_feature_ids - available_feature_ids
+        if unknown_features:
+            raise ValueError(
+                "Unknown enabled features for this feature set: "
+                f"{sorted(unknown_features)!r}."
+            )
+        node_features = [
+            feature
+            for feature in available_node_features
+            if feature.name.removesuffix("_local").removesuffix("_global")
+            in requested_feature_ids
+        ]
+        feature_engine = FeatureEngine(
+            features=[NumVerticesFeature(), NumEdgesFeature(), *node_features]
+        )
+        pooling_strategies = {
+            feature.name: (
+                MeanPooling(),
+                MaxPooling(),
+                MinPooling(),
+                StdPooling(),
+            )
+            for feature in node_features
         }
         return feature_engine, pooling_strategies
 
@@ -294,7 +368,8 @@ def run_experiment(
         )
 
     feature_engine, pooling_strategies = _build_feature_set(
-        config.features.feature_set_id
+        config.features.feature_set_id,
+        config.features.enabled_features,
     )
     subgraph_generator = _build_generator(config.subgraph_generation)
 
@@ -315,7 +390,7 @@ def run_experiment(
                 graph_loader = GraphLoader(raw_graph_path)
                 graph = graph_loader.load()
 
-                for filename in ("metadata", "adjlist"):
+                for filename in ("metadata", "adjlists"):
                     source_path = raw_graph_path / filename
                     stored_path = experiment.artifact_store.copy_file(
                         "graphs",
@@ -415,6 +490,16 @@ def run_experiment(
                     pooling_strategies=pooling_strategies,
                     objective_function=TDSObjective(),
                 )
+                experiment_feature_metadata = {
+                    "feature_set_id": config.features.feature_set_id,
+                    "feature_names": config.features.feature_names,
+                    "enabled_features": config.features.enabled_features,
+                    "objective_name": config.features.objective_name,
+                }
+                expected_dataset_configuration = {
+                    "feature_pipeline": builder.feature_configuration,
+                    "experiment": experiment_feature_metadata,
+                }
                 built_dataset = DatasetPipeline(
                     dataset_builder=builder,
                     processed_dir=processed_root,
@@ -423,6 +508,7 @@ def run_experiment(
                     output_path=processed_path,
                     candidate_subgraphs=candidate_subgraphs,
                     sample_ids=sample_ids,
+                    experiment_metadata=experiment_feature_metadata,
                 )
 
                 if not processed_path.is_file():
@@ -433,7 +519,10 @@ def run_experiment(
                     )
 
             with experiment.track_stage("dataset_loading"):
-                dataset = DatasetLoader(processed_path).load()
+                dataset = DatasetLoader(
+                    processed_path,
+                    expected_configuration=expected_dataset_configuration,
+                ).load()
 
                 if dataset.feature_names != config.features.feature_names:
                     raise ValueError(
@@ -450,6 +539,17 @@ def run_experiment(
                     "datasets",
                     "dataset.csv",
                     "text/csv",
+                )
+                manifest_path = processed_path.with_suffix(".metadata.json")
+                experiment.artifact_store.copy_file(
+                    "datasets",
+                    "dataset.metadata.json",
+                    manifest_path,
+                )
+                experiment.register_artifact(
+                    "datasets",
+                    "dataset.metadata.json",
+                    "application/json",
                 )
 
             with experiment.track_stage("train_validation_test_split"):

@@ -18,7 +18,10 @@ def split_dataset(
         random_state=random_state,
         shuffle=True,
     )
-    return Dataset(train_samples), Dataset(test_samples)
+    return (
+        Dataset(train_samples, metadata=dataset.metadata),
+        Dataset(test_samples, metadata=dataset.metadata),
+    )
 
 
 def split_dataset_three_way(
@@ -48,7 +51,7 @@ def split_dataset_three_way(
     )
 
     return (
-        Dataset(train_samples),
-        Dataset(validation_samples),
-        Dataset(test_samples),
+        Dataset(train_samples, metadata=dataset.metadata),
+        Dataset(validation_samples, metadata=dataset.metadata),
+        Dataset(test_samples, metadata=dataset.metadata),
     )

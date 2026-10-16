@@ -1,8 +1,14 @@
 from types import SimpleNamespace
 
+from src.dataset.dataset import Dataset
 from src.dataset.builder import DatasetBuilder
 from src.features.base import FeatureLevel
-from src.features.pooling import MeanPooling
+from src.features.pooling import (
+    MaxPooling,
+    MeanPooling,
+    MinPooling,
+    StdPooling,
+)
 
 
 class FakeGraph:
@@ -10,8 +16,9 @@ class FakeGraph:
     Minimal graph representation used only for testing DatasetBuilder.
     """
 
-    def __init__(self, name):
+    def __init__(self, name, vertices=None):
         self.name = name
+        self.vertices = vertices
 
 
 class FakeGraphLoader:
@@ -515,6 +522,123 @@ def test_multiple_pooling_strategies_create_multiple_features():
 
     assert "degree_mean" in samples[0].features
     assert samples[0].features["degree_mean"] == 4.0
+
+
+def test_builder_and_dataset_preserve_feature_and_pooling_order():
+    graph = FakeGraph("G")
+    subgraph = FakeGraph("S1")
+    features = [
+        FakeFeature("local_first", FeatureLevel.NODE),
+        FakeFeature("graph_value", FeatureLevel.GRAPH),
+        FakeFeature("local_second", FeatureLevel.NODE),
+    ]
+    builder, _, _, _, _ = create_builder(
+        graph=graph,
+        subgraphs=[subgraph],
+        features=features,
+        global_results={"graph_value": 7},
+        local_results={
+            subgraph: {
+                "local_first": {0: 1, 1: 3},
+                "local_second": {0: 2, 1: 4},
+            }
+        },
+        objective_values={subgraph: 1.0},
+        pooling_strategies={
+            "local_first": (MaxPooling(), MeanPooling()),
+            "local_second": (MeanPooling(),),
+        },
+    )
+
+    dataset = Dataset(builder.build())
+
+    assert dataset.feature_names == [
+        "graph_value",
+        "local_first_max",
+        "local_first_mean",
+        "local_second_mean",
+    ]
+
+
+def test_global_node_values_are_filtered_per_candidate_and_reused():
+    graph = FakeGraph("G", vertices={0, 1, 2})
+    subgraphs = [
+        FakeGraph("S1", vertices={0, 1}),
+        FakeGraph("S2", vertices={1, 2}),
+    ]
+    original_values = {0: 0.1, 1: 0.9, 2: 0.5}
+    global_results = {"score_global": original_values}
+    builder, _, _, feature_engine, _ = create_builder(
+        graph=graph,
+        subgraphs=subgraphs,
+        features=[FakeFeature("score_global", FeatureLevel.NODE)],
+        global_results=global_results,
+        local_results={subgraph: {} for subgraph in subgraphs},
+        objective_values={subgraphs[0]: 1.0, subgraphs[1]: 2.0},
+        pooling_strategies={
+            "score_global": (
+                MeanPooling(),
+                MaxPooling(),
+                MinPooling(),
+                StdPooling(),
+            ),
+        },
+    )
+
+    samples = builder.build()
+    dataset = Dataset(samples)
+
+    assert len(feature_engine.global_calls) == 1
+    assert samples[0].features == {
+        "score_global_mean": 0.5,
+        "score_global_max": 0.9,
+        "score_global_min": 0.1,
+        "score_global_std": 0.4,
+    }
+    assert samples[1].features == {
+        "score_global_mean": 0.7,
+        "score_global_max": 0.9,
+        "score_global_min": 0.5,
+        "score_global_std": 0.2,
+    }
+    assert original_values == {0: 0.1, 1: 0.9, 2: 0.5}
+    assert dataset.num_features == 4
+    assert dataset.feature_names == [
+        "score_global_mean",
+        "score_global_max",
+        "score_global_min",
+        "score_global_std",
+    ]
+
+
+def test_global_node_pooling_supports_singleton_candidate():
+    graph = FakeGraph("G", vertices={0, 1})
+    subgraph = FakeGraph("single", vertices={1})
+    builder, _, _, _, _ = create_builder(
+        graph=graph,
+        subgraphs=[subgraph],
+        features=[FakeFeature("score_global", FeatureLevel.NODE)],
+        global_results={"score_global": {0: 0.2, 1: 0.8}},
+        local_results={subgraph: {}},
+        objective_values={subgraph: 1.0},
+        pooling_strategies={
+            "score_global": (
+                MeanPooling(),
+                MaxPooling(),
+                MinPooling(),
+                StdPooling(),
+            ),
+        },
+    )
+
+    sample = builder.build()[0]
+
+    assert sample.features == {
+        "score_global_mean": 0.8,
+        "score_global_max": 0.8,
+        "score_global_min": 0.8,
+        "score_global_std": 0.0,
+    }
 
 
 def test_objective_is_computed_for_each_subgraph():

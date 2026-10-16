@@ -325,7 +325,7 @@ Cada instância possui uma pasta própria contendo:
 ```text
 instance/
 ├── metadata
-└── adjlist
+└── adjlists
 ```
 
 O arquivo `metadata` contém:
@@ -334,7 +334,7 @@ O arquivo `metadata` contém:
 num_vertices num_edges
 ```
 
-O arquivo `adjlist` possui uma linha para cada vértice.
+O arquivo `adjlists` possui uma linha para cada vértice.
 
 A linha correspondente ao vértice `v` contém entradas no formato:
 

@@ -64,6 +64,31 @@ def test_three_way_split_is_reproducible():
     ]
 
 
+def test_three_way_split_preserves_dataset_configuration_metadata():
+    metadata = {"feature_set_id": "feature-set-v2"}
+    dataset = Dataset(
+        [
+            Sample(
+                graph_id="graph",
+                subgraph_id=index,
+                features={"value": float(index)},
+                target=float(index),
+            )
+            for index in range(50)
+        ],
+        metadata=metadata,
+    )
+
+    subsets = split_dataset_three_way(
+        dataset,
+        test_size=0.2,
+        validation_size=0.25,
+        random_state=17,
+    )
+
+    assert [subset.metadata for subset in subsets] == [metadata] * 3
+
+
 def test_invalid_split_sizes_are_rejected():
     dataset = make_dataset(size=2)
 

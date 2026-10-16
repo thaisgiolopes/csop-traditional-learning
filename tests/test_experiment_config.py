@@ -25,7 +25,7 @@ def make_config(graph_path: Path | None = None) -> ExperimentConfig:
             path=graph_path,
             parameters={
                 "directed": False,
-                "format": "adjlist",
+                "format": "adjlists",
             },
         ),
         subgraph_generation=SubgraphGenerationConfig(
@@ -125,6 +125,24 @@ def test_feature_names_must_be_unique():
         )
 
 
+def test_enabled_features_are_optional_unique_non_empty_names():
+    config = FeatureConfig(
+        feature_set_id="structural-v1",
+        feature_names=["pagerank_local_mean"],
+        objective_name="tds",
+        enabled_features=["pagerank"],
+    )
+    assert config.enabled_features == ["pagerank"]
+
+    with pytest.raises(ValueError, match="duplicates"):
+        FeatureConfig(
+            feature_set_id="structural-v1",
+            feature_names=["pagerank_local_mean"],
+            objective_name="tds",
+            enabled_features=["pagerank", "pagerank"],
+        )
+
+
 @pytest.mark.parametrize(
     ("test_ratio", "validation_size"),
     [
@@ -188,7 +206,7 @@ def test_save_and_load_json_round_trip_preserves_nested_configuration(tmp_path):
     assert loaded.graph.path == str(tmp_path / "graph")
     assert loaded.graph.parameters == {
         "directed": False,
-        "format": "adjlist",
+        "format": "adjlists",
     }
     assert loaded.subgraph_generation.parameters == {
         "allow_duplicates": False,
