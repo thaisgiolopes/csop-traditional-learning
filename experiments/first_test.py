@@ -30,7 +30,7 @@ def make_config() -> ExperimentConfig:
         graph=GraphConfig(
             graph_id=graph_id,
             path=PROJECT_ROOT / "data" / "raw" / "graph_test",
-            parameters={"format": "adjlist", "directed": False},
+            parameters={"format": "adjlists", "directed": False},
         ),
         subgraph_generation=SubgraphGenerationConfig(
             method="networkx_random_paths",

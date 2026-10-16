@@ -1,6 +1,8 @@
+from collections.abc import Collection, Mapping
+from hashlib import sha256
+import json
 from pathlib import Path
 from typing import Any, Sequence
-from collections.abc import Collection
 
 import pandas as pd
 
@@ -43,6 +45,7 @@ class DatasetPipeline:
         *,
         candidate_subgraphs: Collection[Graph] | None = None,
         sample_ids: Sequence[str] | None = None,
+        experiment_metadata: Mapping[str, Any] | None = None,
     ) -> Dataset:
         """
         Build and persist a dataset for one graph instance.
@@ -70,7 +73,11 @@ class DatasetPipeline:
             candidate_subgraphs=candidate_subgraphs,
             sample_ids=sample_ids,
         )
-        dataset = Dataset(samples)
+        configuration = {
+            "feature_pipeline": self._dataset_builder.feature_configuration,
+            "experiment": dict(experiment_metadata or {}),
+        }
+        dataset = Dataset(samples, metadata=configuration)
 
         if not dataset.graph_ids:
             raise ValueError("DatasetBuilder produced no graph identifiers.")
@@ -102,5 +109,23 @@ class DatasetPipeline:
         tabular_dataset["target"] = dataset.y.to_numpy()
 
         tabular_dataset.to_csv(output_file, index=False)
+
+        csv_digest = sha256(output_file.read_bytes()).hexdigest()
+        manifest = {
+            "format_version": 1,
+            "configuration": configuration,
+            "csv_sha256": csv_digest,
+        }
+        manifest_path = output_file.with_suffix(".metadata.json")
+        with manifest_path.open("w", encoding="utf-8") as manifest_file:
+            json.dump(
+                manifest,
+                manifest_file,
+                indent=2,
+                sort_keys=True,
+                ensure_ascii=False,
+                allow_nan=False,
+            )
+            manifest_file.write("\n")
 
         return dataset

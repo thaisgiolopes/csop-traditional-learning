@@ -41,7 +41,7 @@ def test_invalid_metadata(tmp_path):
     instance_path.mkdir()
 
     (instance_path / "metadata").write_text("invalid metadata\n")
-    (instance_path / "adjlist").write_text("")
+    (instance_path / "adjlists").write_text("")
 
     loader = GraphLoader(instance_path)
 
@@ -56,7 +56,7 @@ def test_invalid_adjacency_list_line_count(tmp_path):
 
     (instance_path / "metadata").write_text("4 2\n")
 
-    (instance_path / "adjlist").write_text(
+    (instance_path / "adjlists").write_text(
         "1,10\n"
         "0,10\n"
         "1,20\n"
@@ -75,7 +75,7 @@ def test_inconsistent_edge_id(tmp_path):
 
     (instance_path / "metadata").write_text("2 1\n")
 
-    (instance_path / "adjlist").write_text(
+    (instance_path / "adjlists").write_text(
         "1,10\n"
         "0,20\n"
     )
@@ -93,7 +93,7 @@ def test_edge_id_assigned_to_multiple_edges(tmp_path):
 
     (instance_path / "metadata").write_text("4 2\n")
 
-    (instance_path / "adjlist").write_text(
+    (instance_path / "adjlists").write_text(
         "1,10\n"
         "0,10\n"
         "3,10\n"

@@ -152,7 +152,7 @@ Each graph instance is stored in its own directory:
 ```text
 instance/
 ├── metadata
-└── adjlist
+└── adjlists
 ```
 
 ### Metadata
@@ -171,7 +171,7 @@ For example:
 
 ### Adjacency List
 
-The `adjlist` file contains one line per vertex.
+The `adjlists` file contains one line per vertex.
 
 Each adjacency entry uses the format:
 
@@ -498,7 +498,7 @@ Future experiments should include:
 │   │   └── `integration_test_graph.csv`
 │   └── raw/
 │       └── graph_test/
-│           ├── adjlist
+│           ├── adjlists
 │           └── metadata
 ├── docs/
 │   └── `architecture.md`

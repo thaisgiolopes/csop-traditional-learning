@@ -129,6 +129,7 @@ class FeatureConfig:
     feature_set_id: str
     feature_names: list[str]
     objective_name: str
+    enabled_features: list[str] | None = None
 
     def __post_init__(self) -> None:
         _validate_non_empty_string(self.feature_set_id, "feature_set_id")
@@ -147,6 +148,19 @@ class FeatureConfig:
 
         if len(self.feature_names) != len(set(self.feature_names)):
             raise ValueError("feature_names must not contain duplicates.")
+
+        if self.enabled_features is not None:
+            if not isinstance(self.enabled_features, list):
+                raise TypeError("enabled_features must be a list or None.")
+            if not all(
+                isinstance(name, str) and name.strip()
+                for name in self.enabled_features
+            ):
+                raise ValueError(
+                    "enabled_features must contain only non-empty strings."
+                )
+            if len(self.enabled_features) != len(set(self.enabled_features)):
+                raise ValueError("enabled_features must not contain duplicates.")
 
 
 @dataclass

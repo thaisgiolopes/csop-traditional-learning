@@ -1,4 +1,8 @@
+from collections.abc import Mapping
+from hashlib import sha256
+import json
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 
@@ -22,7 +26,12 @@ class DatasetLoader:
     }
     OPTIONAL_COLUMNS = {"sample_id"}
 
-    def __init__(self, dataset_path: Path | str):
+    def __init__(
+        self,
+        dataset_path: Path | str,
+        *,
+        expected_configuration: Mapping[str, Any] | None = None,
+    ):
         """
         Initialize a dataset loader.
 
@@ -34,6 +43,11 @@ class DatasetLoader:
             IsADirectoryError: If the path refers to a directory.
         """
         self._dataset_path = Path(dataset_path)
+        self._expected_configuration = (
+            dict(expected_configuration)
+            if expected_configuration is not None
+            else None
+        )
 
         if not self._dataset_path.exists():
             raise FileNotFoundError(
@@ -57,6 +71,8 @@ class DatasetLoader:
             ValueError: If the CSV cannot be parsed, required columns are
                 missing, or the file contains no samples.
         """
+        configuration = self._load_manifest_configuration()
+
         try:
             dataframe = pd.read_csv(self._dataset_path)
         except pd.errors.EmptyDataError as exc:
@@ -102,9 +118,54 @@ class DatasetLoader:
         ]
 
         try:
-            return Dataset(samples)
+            return Dataset(samples, metadata=configuration)
         except ValueError as exc:
             raise ValueError(
                 f"Processed dataset contains invalid sample data: "
                 f"{self._dataset_path}"
             ) from exc
+
+    def _load_manifest_configuration(self) -> dict[str, Any] | None:
+        """Read and validate a neighboring dataset configuration manifest."""
+        manifest_path = self._dataset_path.with_suffix(".metadata.json")
+        if not manifest_path.exists():
+            if self._expected_configuration is not None:
+                raise ValueError(
+                    "Processed dataset has no configuration manifest: "
+                    f"{self._dataset_path}"
+                )
+            return None
+
+        try:
+            with manifest_path.open(encoding="utf-8") as manifest_file:
+                manifest = json.load(manifest_file)
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ValueError(
+                f"Could not read dataset manifest: {manifest_path}"
+            ) from exc
+
+        if not isinstance(manifest, dict) or manifest.get("format_version") != 1:
+            raise ValueError(f"Unsupported dataset manifest: {manifest_path}")
+
+        expected_digest = manifest.get("csv_sha256")
+        actual_digest = sha256(self._dataset_path.read_bytes()).hexdigest()
+        if expected_digest != actual_digest:
+            raise ValueError(
+                "Dataset CSV does not match its configuration manifest: "
+                f"{self._dataset_path}"
+            )
+
+        configuration = manifest.get("configuration")
+        if not isinstance(configuration, dict):
+            raise ValueError(
+                f"Dataset manifest has invalid configuration: {manifest_path}"
+            )
+        if (
+            self._expected_configuration is not None
+            and configuration != self._expected_configuration
+        ):
+            raise ValueError(
+                "Processed dataset feature configuration does not match the "
+                "expected configuration."
+            )
+        return configuration

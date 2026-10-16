@@ -1,4 +1,5 @@
 import math
+from collections.abc import Mapping
 from numbers import Real
 from typing import Any
 
@@ -16,13 +17,19 @@ class Dataset:
 	generate subgraphs, apply pooling, or train a model.
 	"""
 
-	def __init__(self, samples: list[Sample]):
+	def __init__(
+		self,
+		samples: list[Sample],
+		metadata: Mapping[str, Any] | None = None,
+	):
 		"""
 		Initialize a dataset from an ordered collection of samples.
 
 		Args:
 			samples: Samples with identical feature schemas and numerical
 				feature and target values.
+			metadata: Optional persisted configuration metadata associated with
+				the feature matrix.
 
 		Raises:
 			ValueError: If the collection is empty, feature schemas differ,
@@ -32,6 +39,7 @@ class Dataset:
 			raise ValueError("Dataset requires at least one sample.")
 
 		self._samples = list(samples)
+		self._metadata = dict(metadata) if metadata is not None else None
 		self._feature_names = list(self._samples[0].features.keys())
 		expected_features = set(self._feature_names)
 
@@ -125,3 +133,8 @@ class Dataset:
 	def feature_names(self) -> list[str]:
 		"""Return feature column names in their tabular order."""
 		return list(self._feature_names)
+
+	@property
+	def metadata(self) -> dict[str, Any] | None:
+		"""Return persisted dataset configuration metadata, if available."""
+		return None if self._metadata is None else dict(self._metadata)
