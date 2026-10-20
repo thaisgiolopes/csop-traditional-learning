@@ -208,3 +208,33 @@ def test_pipeline_without_new_features_keeps_legacy_behavior(tmp_path):
     assert dataset.X["degree_mean"].tolist() == [1.0]
     assert dataset.y.tolist() == [1.0]
     assert dataset.metadata["experiment"] == {}
+
+
+def test_pipeline_records_feature_and_persistence_stages_separately(tmp_path):
+    pipeline, _, candidates = create_pipeline(tmp_path)
+    recorded_stages = []
+
+    class StageContext:
+        def __init__(self, stage_name):
+            self.stage_name = stage_name
+
+        def __enter__(self):
+            recorded_stages.append((self.stage_name, "started"))
+
+        def __exit__(self, exception_type, exception, traceback):
+            recorded_stages.append((self.stage_name, "finished"))
+            return False
+
+    dataset = pipeline.run(
+        graph_id="graph-A",
+        candidate_subgraphs=candidates,
+        stage_context_factory=StageContext,
+    )
+
+    assert dataset.num_samples == len(candidates)
+    assert recorded_stages == [
+        ("feature_extraction_and_targets", "started"),
+        ("feature_extraction_and_targets", "finished"),
+        ("dataset_construction_and_persistence", "started"),
+        ("dataset_construction_and_persistence", "finished"),
+    ]

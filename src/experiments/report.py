@@ -53,6 +53,7 @@ XLSX_SHEETS = {
         "finished_at",
         "graph_id",
         "graph_path",
+        "max_observed_rss_bytes",
         "graph_num_vertices",
         "graph_num_edges",
         "generation_method",
@@ -67,14 +68,18 @@ XLSX_SHEETS = {
         "test_ratio",
         "validation_size",
         "split_random_state",
+        "memory_measurement_scope",
         "model_type",
         "model_hyperparameters",
         "total_duration_seconds",
-        "peak_or_recorded_memory_bytes",
         "num_predictions",
         "evaluation_metrics",
         "configuration_path",
         "environment_path",
+    ),
+    "Configuration": (
+        "experiment_id",
+        "configuration_json",
     ),
     "Stages": (
         "experiment_id",
@@ -120,6 +125,10 @@ XLSX_SHEETS = {
         "predicted_value",
         "actual_value",
         "prediction_error",
+    ),
+    "Configuration": (
+        "experiment_id",
+        "configuration_json",
     ),
 }
 
@@ -408,13 +417,14 @@ class ExperimentReport:
         artifacts = self._database.get_experiment_artifacts(experiment_id)
         predictions = self._database.get_experiment_predictions(experiment_id)
         evaluations = self._database.get_experiment_evaluations(experiment_id)
+        metrics = self._database.get_experiment_metrics(experiment_id)
 
         summary_row = self._xlsx_experiment_row(
             experiment,
             config,
             stages,
             predictions,
-            evaluations,
+            metrics,
         )
         stage_rows = [
             {
@@ -493,6 +503,16 @@ class ExperimentReport:
             XLSX_SHEETS["Experiments"],
             summary_row,
         )
+
+        self._upsert_summary(
+            worksheets["Configuration"],
+            XLSX_SHEETS["Configuration"],
+            {
+                "experiment_id": experiment_id,
+                "configuration_json": _json_cell(config),
+            },
+        )
+
         self._replace_experiment_rows(
             worksheets["Stages"],
             XLSX_SHEETS["Stages"],
@@ -546,7 +566,7 @@ class ExperimentReport:
         config: dict[str, Any],
         stages: list[Any],
         predictions: list[Any],
-        evaluations: list[Any],
+        metric_records: list[Any],
     ) -> dict[str, Any]:
         graph = config.get("graph") or {}
         graph_parameters = graph.get("parameters") or {}
@@ -571,8 +591,12 @@ class ExperimentReport:
             if value is not None
         ]
         metrics = {
-            item.metric_name: item.metric_value
-            for item in sorted(evaluations, key=lambda item: item.metric_name)
+            (
+                f"{item.split}/{item.metric_name}"
+                if item.split is not None
+                else item.metric_name
+            ): item.metric_value
+            for item in metric_records
         }
 
         return {
@@ -619,6 +643,11 @@ class ExperimentReport:
                 if split.get("random_state") is not None
                 else ""
             ),
+            "memory_measurement_scope": (
+                "Maximum RSS observed at stage boundaries; not process peak"
+                if memory_values
+                else ""
+            ),
             "model_type": model.get("model_type") or "",
             "model_hyperparameters": _json_cell(
                 model.get("hyperparameters") or {}
@@ -627,9 +656,7 @@ class ExperimentReport:
                 experiment.started_at,
                 experiment.finished_at,
             ),
-            "peak_or_recorded_memory_bytes": (
-                max(memory_values) if memory_values else ""
-            ),
+            "max_observed_rss_bytes": max(memory_values) if memory_values else "",
             "num_predictions": len(predictions),
             "evaluation_metrics": _json_cell(metrics),
             "configuration_path": self._project_relative_path(
@@ -776,7 +803,7 @@ class ExperimentReport:
         predictions = self._database.get_experiment_predictions(
             experiment.experiment_id
         )
-        evaluations = self._database.get_experiment_evaluations(
+        metrics = self._database.get_experiment_metrics(
             experiment.experiment_id
         )
 
@@ -787,11 +814,12 @@ class ExperimentReport:
         }
         feature_names = features.get("feature_names") or []
         evaluation_metrics = {
-            record.metric_name: record.metric_value
-            for record in sorted(
-                evaluations,
-                key=lambda item: item.metric_name,
-            )
+            (
+                f"{record.split}/{record.metric_name}"
+                if record.split is not None
+                else record.metric_name
+            ): record.metric_value
+            for record in metrics
         }
 
         return {

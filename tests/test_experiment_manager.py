@@ -144,7 +144,7 @@ def test_context_manager_marks_failed_experiment_and_reraises(
 
 
 def test_tracked_stage_is_registered_through_manager(database, tmp_path):
-    readings = iter([1000, 1250])
+    readings = iter([1000, 1250, 1250, 1300])
     monitor = ProcessMemoryMonitor(
         memory_reader=lambda: next(readings),
         measurement_method="test_reader",
@@ -155,13 +155,20 @@ def test_tracked_stage_is_registered_through_manager(database, tmp_path):
         with experiment.track_stage("candidate_generation"):
             pass
 
-    [stage] = database.get_experiment_stages(manager.experiment_id)
+    stages = database.get_experiment_stages(manager.experiment_id)
+    stage = next(
+        item for item in stages if item.stage_name == "candidate_generation"
+    )
     assert stage.stage_name == "candidate_generation"
     assert stage.status == "completed"
     assert stage.duration_seconds is not None
     assert stage.memory_before_bytes == 1000
     assert stage.memory_after_bytes == 1250
     assert stage.memory_delta_bytes == 250
+    assert [item.stage_name for item in stages] == [
+        "candidate_generation",
+        "report_persistence",
+    ]
 
 
 def test_artifact_registration_is_exposed_by_manager(database, tmp_path):
@@ -261,5 +268,8 @@ def test_tracker_reuses_injected_timer_factory(database, tmp_path):
         with manager.track_stage("test-stage"):
             pass
 
-    assert len(created_timers) == 1
+    assert [timer.stage_name for timer in created_timers] == [
+        "test-stage",
+        "report_persistence",
+    ]
     assert created_timers[0].running is False
