@@ -1,4 +1,7 @@
 from abc import ABC, abstractmethod
+from collections.abc import Collection
+from typing import Protocol, runtime_checkable
+
 from ..graph import Graph
 
 
@@ -29,7 +32,7 @@ class SubgraphGenerator(ABC):
         )
 
     @abstractmethod
-    def generate(self, graph: Graph):
+    def generate(self, graph: Graph) -> Collection[Graph]:
         """
         Generate candidate subgraphs from a complete graph.
 
@@ -49,3 +52,21 @@ class SubgraphGenerator(ABC):
         raise NotImplementedError(
             "Subclasses must implement subgraph generation."
         )
+
+
+@runtime_checkable
+class IndexedSubgraphGenerator(Protocol):
+    """Capability for generators that reproduce one attempt by index."""
+
+    @property
+    def name(self) -> str:
+        """Return the identifier of the generation strategy."""
+        ...
+
+    def generate(self, graph: Graph) -> Collection[Graph]:
+        """Generate a collection of candidate subgraphs."""
+        ...
+
+    def generate_at_index(self, graph: Graph, index: int) -> Graph | None:
+        """Generate one deterministic candidate attempt, or return None."""
+        ...

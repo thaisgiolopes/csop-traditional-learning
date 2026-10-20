@@ -81,7 +81,8 @@ The current experiment is an integration experiment rather than a final machine 
 
 At this stage:
 
-- candidate subgraphs are generated from random paths;
+- candidate subgraphs can be generated from random paths or by connected
+        expansion to an exact target vertex count;
 - only one graph instance is used by the integration experiment;
 - the same dataset is used for training and prediction;
 - no train/test split or cross-validation is performed;
@@ -142,6 +143,12 @@ The experiment output is written to:
 ```
 
 The integration experiment can also be used as an executable demonstration of the complete architecture.
+
+Experiments select the strategy through `SubgraphGenerationConfig.method`.
+For example, connected expansion uses `method="networkx_connected_expansion"`
+and `parameters={"subgraph_size": 50}`; an optional
+`parameters={"subgraph_size": 50, "max_attempts": 5000}` sets the bounded
+generation-attempt limit.
 
 ---
 
