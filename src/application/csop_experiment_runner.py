@@ -46,6 +46,10 @@ from src.objectives.tds import TDSObjective
 from src.pipeline.dataset_pipeline import DatasetPipeline
 from src.pipeline.prediction_pipeline import PredictionPipeline
 from src.pipeline.training_pipeline import TrainingPipeline
+from src.subgraphs.base import IndexedSubgraphGenerator
+from src.subgraphs.connected_expansion_generator import (
+    ConnectedExpansionSubgraphGenerator,
+)
 from src.subgraphs.networkx_generator import NetworkXSubgraphGenerator
 from src.experiments.config import (
     ExperimentConfig,
@@ -151,7 +155,7 @@ def _build_feature_set(
 
 def _build_generator(
     config: SubgraphGenerationConfig,
-) -> NetworkXSubgraphGenerator:
+) -> IndexedSubgraphGenerator:
     if config.method == "networkx_random_paths":
         return NetworkXSubgraphGenerator(
             num_subgraphs=config.sample_count,
@@ -159,7 +163,36 @@ def _build_generator(
             seed=config.seed,
         )
 
+    if config.method == "networkx_connected_expansion":
+        subgraph_size = config.parameters.get("subgraph_size")
+        if isinstance(subgraph_size, bool) or not isinstance(subgraph_size, int):
+            raise ValueError(
+                "networkx_connected_expansion requires integer "
+                "parameters.subgraph_size."
+            )
+        max_attempts = _generation_attempt_limit(config)
+        return ConnectedExpansionSubgraphGenerator(
+            num_subgraphs=config.sample_count,
+            subgraph_size=subgraph_size,
+            seed=config.seed,
+            max_attempts=max_attempts,
+        )
+
     raise ValueError(f"Unknown subgraph generation method: {config.method!r}")
+
+
+def _generation_attempt_limit(config: SubgraphGenerationConfig) -> int:
+    """Resolve the bounded generation-attempt limit from method parameters."""
+    default_limit = min(max(100, config.sample_count * 50), 100_000)
+    if config.method != "networkx_connected_expansion":
+        return default_limit
+
+    max_attempts = config.parameters.get("max_attempts", default_limit)
+    if isinstance(max_attempts, bool) or not isinstance(max_attempts, int):
+        raise ValueError("subgraph generation max_attempts must be an integer.")
+    if max_attempts <= 0:
+        raise ValueError("subgraph generation max_attempts must be positive.")
+    return max_attempts
 
 
 def _sample_compatibility_key(
@@ -167,14 +200,24 @@ def _sample_compatibility_key(
     config: SubgraphGenerationConfig,
 ) -> tuple[str, dict[str, Any]]:
     """Build the compatibility key for structural candidate samples."""
+    parameters = config.parameters
+    path_length = config.path_length
+    if config.method == "networkx_connected_expansion":
+        parameters = {
+            name: value
+            for name, value in config.parameters.items()
+            if name != "max_attempts"
+        }
+        path_length = None
+
     metadata = {
         "graph_fingerprint": graph_digest,
         "method": config.method,
         "generator_version": 1,
         "networkx_version": nx.__version__,
         "seed": config.seed,
-        "path_length": config.path_length,
-        "parameters": config.parameters,
+        "path_length": path_length,
+        "parameters": parameters,
     }
     serialized = json.dumps(
         metadata,
@@ -193,7 +236,7 @@ def _resolve_candidate_samples(
     graph: Graph,
     graph_id: str,
     generation_config: SubgraphGenerationConfig,
-    generator: NetworkXSubgraphGenerator,
+    generator: IndexedSubgraphGenerator,
 ) -> tuple[list[SampleRecord], list[str]]:
     """Reuse compatible structures and deterministically generate missing ones."""
     requested_count = generation_config.sample_count
@@ -209,7 +252,7 @@ def _resolve_candidate_samples(
     )
     available_ids = {record.sample_id for record in compatible}
     newly_generated_ids: set[str] = set()
-    max_attempts = min(max(100, requested_count * 50), 100_000)
+    max_attempts = _generation_attempt_limit(generation_config)
     attempts = 0
 
     while len(available_ids) < requested_count and attempts < max_attempts:
@@ -222,6 +265,9 @@ def _resolve_candidate_samples(
             continue
 
         sample_id = sample_identity(graph_digest, candidate)
+        if sample_id in available_ids:
+            continue
+
         inserted = database.register_generated_sample(
             sample_id=sample_id,
             graph_id=graph_id,

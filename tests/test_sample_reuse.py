@@ -3,6 +3,7 @@
 import pytest
 
 from src.application.csop_experiment_runner import (
+    _build_generator,
     _resolve_candidate_samples,
     _sample_compatibility_key,
 )
@@ -15,6 +16,9 @@ from src.subgraphs.identity import (
     graph_from_canonical_structure,
 )
 from src.subgraphs.networkx_generator import NetworkXSubgraphGenerator
+from src.subgraphs.connected_expansion_generator import (
+    ConnectedExpansionSubgraphGenerator,
+)
 
 
 @pytest.fixture
@@ -238,6 +242,202 @@ def test_incremental_generation_matches_single_request_sequence(tmp_path):
     finally:
         incremental_db.close()
         single_db.close()
+
+
+def test_runner_builds_both_generators_from_configuration():
+    random_paths = _build_generator(
+        SubgraphGenerationConfig(
+            method="networkx_random_paths",
+            sample_count=3,
+            path_length=2,
+            seed=42,
+        )
+    )
+    connected_expansion = _build_generator(
+        SubgraphGenerationConfig(
+            method="networkx_connected_expansion",
+            sample_count=3,
+            seed=42,
+            parameters={"subgraph_size": 4, "max_attempts": 30},
+        )
+    )
+
+    assert isinstance(random_paths, NetworkXSubgraphGenerator)
+    assert isinstance(connected_expansion, ConnectedExpansionSubgraphGenerator)
+    candidate = connected_expansion.generate_at_index(make_graph(), 0)
+    assert candidate is not None
+    assert candidate.num_vertices == 4
+
+
+def test_connected_expansion_samples_are_persisted_and_reused(database):
+    graph = make_graph()
+    first_config = SubgraphGenerationConfig(
+        method="networkx_connected_expansion",
+        sample_count=3,
+        seed=42,
+        parameters={"subgraph_size": 4, "max_attempts": 30},
+    )
+    second_config = SubgraphGenerationConfig(
+        method="networkx_connected_expansion",
+        sample_count=3,
+        seed=42,
+        parameters={"subgraph_size": 4, "max_attempts": 1},
+    )
+    create_experiment(database, "EXP_CONNECTED_1")
+    first, first_origins = _resolve_candidate_samples(
+        database,
+        experiment_id="EXP_CONNECTED_1",
+        graph=graph,
+        graph_id="graph-shared",
+        generation_config=first_config,
+        generator=_build_generator(first_config),
+    )
+    create_experiment(database, "EXP_CONNECTED_2")
+    second, second_origins = _resolve_candidate_samples(
+        database,
+        experiment_id="EXP_CONNECTED_2",
+        graph=graph,
+        graph_id="graph-shared",
+        generation_config=second_config,
+        generator=_build_generator(second_config),
+    )
+
+    assert first_origins == ["generated"] * 3
+    assert second_origins == ["reused"] * 3
+    assert [record.sample_id for record in first] == [
+        record.sample_id for record in second
+    ]
+    assert all(len(record.vertices) == 4 for record in first)
+
+
+def test_failed_connected_expansion_attempts_are_not_persisted(database):
+    graph = Graph(vertices=range(4), edges=[(0, 1), (2, 3)])
+    config = SubgraphGenerationConfig(
+        method="networkx_connected_expansion",
+        sample_count=1,
+        seed=42,
+        parameters={"subgraph_size": 3, "max_attempts": 4},
+    )
+    create_experiment(database, "EXP_CONNECTED_FAIL")
+
+    with pytest.raises(RuntimeError, match="after 4 deterministic attempts"):
+        _resolve_candidate_samples(
+            database,
+            experiment_id="EXP_CONNECTED_FAIL",
+            graph=graph,
+            graph_id="graph-shared",
+            generation_config=config,
+            generator=_build_generator(config),
+        )
+
+    assert database.get_compatible_samples(
+        _sample_compatibility_key(graph_fingerprint(graph), config)[0]
+    ) == []
+
+
+def test_duplicate_connected_candidates_are_not_persisted(database):
+    graph = make_graph()
+    candidate = Graph(vertices=[0, 1, 2, 3], edges=[(0, 1), (1, 2), (2, 3)])
+
+    class RepeatingGenerator:
+        def generate_at_index(self, graph, index):
+            return candidate
+
+    config = SubgraphGenerationConfig(
+        method="networkx_connected_expansion",
+        sample_count=2,
+        seed=42,
+        parameters={"subgraph_size": 4, "max_attempts": 5},
+    )
+    create_experiment(database, "EXP_CONNECTED_DUPLICATE")
+
+    with pytest.raises(RuntimeError, match="Could generate only 1 unique"):
+        _resolve_candidate_samples(
+            database,
+            experiment_id="EXP_CONNECTED_DUPLICATE",
+            graph=graph,
+            graph_id="graph-shared",
+            generation_config=config,
+            generator=RepeatingGenerator(),
+        )
+
+    compatibility_key, _ = _sample_compatibility_key(
+        graph_fingerprint(graph),
+        config,
+    )
+    records = database.get_compatible_samples(compatibility_key)
+    assert len(records) == 1
+    assert records[0].sequence_index == 0
+
+
+def test_generation_method_and_target_size_are_compatibility_inputs():
+    graph_digest = graph_fingerprint(make_graph())
+    random_config = SubgraphGenerationConfig(
+        method="networkx_random_paths",
+        sample_count=3,
+        path_length=2,
+        seed=42,
+    )
+    connected_config = SubgraphGenerationConfig(
+        method="networkx_connected_expansion",
+        sample_count=3,
+        seed=42,
+        parameters={"subgraph_size": 4},
+    )
+    other_size_config = SubgraphGenerationConfig(
+        method="networkx_connected_expansion",
+        sample_count=3,
+        seed=42,
+        parameters={"subgraph_size": 5},
+    )
+
+    random_key = _sample_compatibility_key(graph_digest, random_config)[0]
+    connected_key = _sample_compatibility_key(graph_digest, connected_config)[0]
+    other_size_key = _sample_compatibility_key(graph_digest, other_size_config)[0]
+
+    assert len({random_key, connected_key, other_size_key}) == 3
+
+
+def test_connected_expansion_attempt_limit_does_not_change_compatibility():
+    graph_digest = graph_fingerprint(make_graph())
+    lower_limit = SubgraphGenerationConfig(
+        method="networkx_connected_expansion",
+        sample_count=3,
+        seed=42,
+        parameters={"subgraph_size": 4, "max_attempts": 10},
+    )
+    higher_limit = SubgraphGenerationConfig(
+        method="networkx_connected_expansion",
+        sample_count=3,
+        seed=42,
+        parameters={"max_attempts": 500, "subgraph_size": 4},
+    )
+
+    assert _sample_compatibility_key(graph_digest, lower_limit)[0] == (
+        _sample_compatibility_key(graph_digest, higher_limit)[0]
+    )
+
+
+def test_random_paths_compatibility_still_includes_all_parameters():
+    graph_digest = graph_fingerprint(make_graph())
+    lower_limit = SubgraphGenerationConfig(
+        method="networkx_random_paths",
+        sample_count=3,
+        path_length=2,
+        seed=42,
+        parameters={"max_attempts": 10},
+    )
+    higher_limit = SubgraphGenerationConfig(
+        method="networkx_random_paths",
+        sample_count=3,
+        path_length=2,
+        seed=42,
+        parameters={"max_attempts": 500},
+    )
+
+    assert _sample_compatibility_key(graph_digest, lower_limit)[0] != (
+        _sample_compatibility_key(graph_digest, higher_limit)[0]
+    )
 
 
 def test_graph_fingerprint_ignores_input_order():

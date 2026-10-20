@@ -944,8 +944,9 @@ Pooling
    └── StdPooling
 
 SubgraphGenerator
-   ├── NetworkXSubgraphGenerator
-   └── ...
+  ├── NetworkXSubgraphGenerator (random paths)
+  ├── ConnectedExpansionSubgraphGenerator (exact-size connected candidates)
+  └── ...
 
 Predictor
    ├── LightGBMPredictor
