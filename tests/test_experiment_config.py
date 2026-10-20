@@ -228,3 +228,13 @@ def test_to_dict_rejects_unsupported_values():
 
     with pytest.raises(TypeError, match="not JSON-compatible"):
         config.to_dict()
+
+def test_configuration_json_serialization_is_deterministic(tmp_path):
+    config = make_config()
+    first = tmp_path / "first.json"
+    second = tmp_path / "second.json"
+
+    config.save_json(first)
+    config.save_json(second)
+
+    assert first.read_bytes() == second.read_bytes()

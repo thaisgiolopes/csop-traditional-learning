@@ -222,6 +222,7 @@ class ExperimentConfig:
     name: str | None = None
     description: str | None = None
     random_seed: int = 42
+    output: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.name is not None:
@@ -251,6 +252,8 @@ class ExperimentConfig:
                     f"{field_name} must be an instance of "
                     f"{expected_type.__name__}."
                 )
+            
+        _validate_parameters(self.output, "output")
 
     def to_dict(self) -> dict[str, Any]:
         """Return the configuration as deterministic JSON-compatible data."""

@@ -1,5 +1,7 @@
 """Tests for deterministic sample reuse across experiment runs."""
 
+from contextlib import contextmanager
+
 import pytest
 
 from src.application.csop_experiment_runner import (
@@ -416,6 +418,63 @@ def test_connected_expansion_attempt_limit_does_not_change_compatibility():
     assert _sample_compatibility_key(graph_digest, lower_limit)[0] == (
         _sample_compatibility_key(graph_digest, higher_limit)[0]
     )
+
+
+def test_generation_and_reuse_are_tracked_as_separate_stages(database):
+    graph = make_graph()
+    config = SubgraphGenerationConfig(
+        method="networkx_connected_expansion",
+        sample_count=2,
+        seed=42,
+        parameters={"subgraph_size": 3, "max_attempts": 100},
+    )
+
+    class RecordingExperiment:
+        def __init__(self, experiment_id):
+            self.experiment_id = experiment_id
+            self.stage_names = []
+
+        @contextmanager
+        def track_stage(self, stage_name):
+            self.stage_names.append(stage_name)
+            yield
+
+    first_experiment = RecordingExperiment("EXP_TRACK_1")
+    create_experiment(database, first_experiment.experiment_id)
+    first_records, first_origins = _resolve_candidate_samples(
+        database,
+        experiment_id=first_experiment.experiment_id,
+        graph=graph,
+        graph_id="graph-shared",
+        generation_config=config,
+        generator=_build_generator(config),
+        experiment=first_experiment,
+    )
+
+    second_experiment = RecordingExperiment("EXP_TRACK_2")
+    create_experiment(database, second_experiment.experiment_id)
+    second_records, second_origins = _resolve_candidate_samples(
+        database,
+        experiment_id=second_experiment.experiment_id,
+        graph=graph,
+        graph_id="graph-shared",
+        generation_config=config,
+        generator=_build_generator(config),
+        experiment=second_experiment,
+    )
+
+    expected_stages = [
+        "candidate_retrieval",
+        "candidate_generation",
+        "candidate_selection_and_association",
+    ]
+    assert first_experiment.stage_names == expected_stages
+    assert second_experiment.stage_names == expected_stages
+    assert first_origins == ["generated", "generated"]
+    assert second_origins == ["reused", "reused"]
+    assert [record.sample_id for record in first_records] == [
+        record.sample_id for record in second_records
+    ]
 
 
 def test_random_paths_compatibility_still_includes_all_parameters():

@@ -67,6 +67,62 @@ def test_update_xlsx_writes_stage_artifact_prediction_and_metric_sheets(
     workbook.close()
 
 
+def test_xlsx_contains_effective_configuration_and_split_metrics(
+    database,
+    tmp_path,
+):
+    config_path = add_experiment(database, tmp_path, "EXP_TRACKED")
+    train_stage = database.register_stage(
+        "EXP_TRACKED",
+        "train_evaluation",
+        "completed",
+    )
+    test_stage = database.register_stage(
+        "EXP_TRACKED",
+        "test_evaluation",
+        "completed",
+    )
+    database.register_metric(
+        experiment_id="EXP_TRACKED",
+        stage_id=train_stage.stage_id,
+        metric_name="mae",
+        split="train",
+        metric_value=0.1,
+    )
+    database.register_metric(
+        experiment_id="EXP_TRACKED",
+        stage_id=test_stage.stage_id,
+        metric_name="mae",
+        split="test",
+        metric_value=0.3,
+    )
+
+    report_path = tmp_path / "reports" / "tracking.xlsx"
+    ExperimentReport(database).update_xlsx(report_path, "EXP_TRACKED")
+
+    workbook = load_workbook(report_path, read_only=True, data_only=True)
+    configuration_rows = list(workbook["Configuration"].values)
+    experiment_rows = list(workbook["Experiments"].values)
+    metric_rows = list(workbook["Metrics"].values)
+    workbook.close()
+
+    assert configuration_rows[0] == ("experiment_id", "configuration_json")
+    assert configuration_rows[1][0] == "EXP_TRACKED"
+    assert json.loads(configuration_rows[1][1])["model"]["model_type"] == "lightgbm"
+    assert "max_observed_rss_bytes" in experiment_rows[0]
+    assert "peak_or_recorded_memory_bytes" not in experiment_rows[0]
+    summary = dict(zip(experiment_rows[0], experiment_rows[1], strict=True))
+    assert json.loads(summary["evaluation_metrics"]) == {
+        "test/mae": 0.3,
+        "train/mae": 0.1,
+    }
+    assert {(row[3], row[4]) for row in metric_rows[1:]} == {
+        ("mae", "train"),
+        ("mae", "test"),
+    }
+    assert config_path.is_file()
+
+
 def test_tracking_dataframes_have_explicit_schema_and_nullable_dtypes(
     database,
     tmp_path,

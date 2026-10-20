@@ -188,10 +188,14 @@ class ExperimentManager:
             self._finished = True
 
         try:
-            ExperimentReport(self.database).update_xlsx(
-                self.report_path,
-                self.experiment_id,
-            )
+            log_path = self.experiment_root / "logs" / "experiment.log"
+            if self.artifact_store.exists("logs", "experiment.log"):
+                self.register_artifact("logs", "experiment.log", "text/plain")
+
+            report = ExperimentReport(self.database)
+            with self.tracker.track_stage("report_persistence"):
+                report.update_xlsx(self.report_path, self.experiment_id)
+            report.update_xlsx(self.report_path, self.experiment_id)
         except Exception:
             self.logger.exception(
                 "Could not update experiment XLSX report at %s",

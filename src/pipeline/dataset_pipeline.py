@@ -1,8 +1,9 @@
-from collections.abc import Collection, Mapping
+from collections.abc import Callable, Collection, Mapping
+from contextlib import nullcontext
 from hashlib import sha256
 import json
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, ContextManager, Sequence
 
 import pandas as pd
 
@@ -46,6 +47,7 @@ class DatasetPipeline:
         candidate_subgraphs: Collection[Graph] | None = None,
         sample_ids: Sequence[str] | None = None,
         experiment_metadata: Mapping[str, Any] | None = None,
+        stage_context_factory: Callable[[str], ContextManager[Any]] | None = None,
     ) -> Dataset:
         """
         Build and persist a dataset for one graph instance.
@@ -68,64 +70,71 @@ class DatasetPipeline:
             ValueError: If the builder produces no samples or samples with
                 inconsistent graph identifiers.
         """
-        samples = self._dataset_builder.build(
-            graph_id=graph_id,
-            candidate_subgraphs=candidate_subgraphs,
-            sample_ids=sample_ids,
+        stage_context_factory = stage_context_factory or (
+            lambda unused_stage_name: nullcontext()
         )
-        configuration = {
-            "feature_pipeline": self._dataset_builder.feature_configuration,
-            "experiment": dict(experiment_metadata or {}),
-        }
-        dataset = Dataset(samples, metadata=configuration)
 
-        if not dataset.graph_ids:
-            raise ValueError("DatasetBuilder produced no graph identifiers.")
-
-        graph_ids = set(dataset.graph_ids)
-        if len(graph_ids) != 1:
-            raise ValueError(
-                "DatasetPipeline expects samples from one graph instance."
+        with stage_context_factory("feature_extraction_and_targets"):
+            samples = self._dataset_builder.build(
+                graph_id=graph_id,
+                candidate_subgraphs=candidate_subgraphs,
+                sample_ids=sample_ids,
             )
 
-        resolved_graph_id = next(iter(graph_ids))
+        with stage_context_factory("dataset_construction_and_persistence"):
+            configuration = {
+                "feature_pipeline": self._dataset_builder.feature_configuration,
+                "experiment": dict(experiment_metadata or {}),
+            }
+            dataset = Dataset(samples, metadata=configuration)
 
-        if output_path is None:
-            output_file = self._processed_dir / f"{resolved_graph_id}.csv"
-        else:
-            output_file = Path(output_path)
+            if not dataset.graph_ids:
+                raise ValueError("DatasetBuilder produced no graph identifiers.")
 
-        output_file.parent.mkdir(parents=True, exist_ok=True)
+            graph_ids = set(dataset.graph_ids)
+            if len(graph_ids) != 1:
+                raise ValueError(
+                    "DatasetPipeline expects samples from one graph instance."
+                )
 
-        tabular_dataset = dataset.X.copy()
-        tabular_dataset.insert(0, "graph_id", dataset.graph_ids)
-        tabular_dataset.insert(1, "subgraph_id", dataset.subgraph_ids)
-        if any(sample.sample_id is not None for sample in dataset.samples):
-            tabular_dataset.insert(
-                2,
-                "sample_id",
-                [sample.sample_id for sample in dataset.samples],
-            )
-        tabular_dataset["target"] = dataset.y.to_numpy()
+            resolved_graph_id = next(iter(graph_ids))
 
-        tabular_dataset.to_csv(output_file, index=False)
+            if output_path is None:
+                output_file = self._processed_dir / f"{resolved_graph_id}.csv"
+            else:
+                output_file = Path(output_path)
 
-        csv_digest = sha256(output_file.read_bytes()).hexdigest()
-        manifest = {
-            "format_version": 1,
-            "configuration": configuration,
-            "csv_sha256": csv_digest,
-        }
-        manifest_path = output_file.with_suffix(".metadata.json")
-        with manifest_path.open("w", encoding="utf-8") as manifest_file:
-            json.dump(
-                manifest,
-                manifest_file,
-                indent=2,
-                sort_keys=True,
-                ensure_ascii=False,
-                allow_nan=False,
-            )
-            manifest_file.write("\n")
+            output_file.parent.mkdir(parents=True, exist_ok=True)
 
-        return dataset
+            tabular_dataset = dataset.X.copy()
+            tabular_dataset.insert(0, "graph_id", dataset.graph_ids)
+            tabular_dataset.insert(1, "subgraph_id", dataset.subgraph_ids)
+            if any(sample.sample_id is not None for sample in dataset.samples):
+                tabular_dataset.insert(
+                    2,
+                    "sample_id",
+                    [sample.sample_id for sample in dataset.samples],
+                )
+            tabular_dataset["target"] = dataset.y.to_numpy()
+
+            tabular_dataset.to_csv(output_file, index=False)
+
+            csv_digest = sha256(output_file.read_bytes()).hexdigest()
+            manifest = {
+                "format_version": 1,
+                "configuration": configuration,
+                "csv_sha256": csv_digest,
+            }
+            manifest_path = output_file.with_suffix(".metadata.json")
+            with manifest_path.open("w", encoding="utf-8") as manifest_file:
+                json.dump(
+                    manifest,
+                    manifest_file,
+                    indent=2,
+                    sort_keys=True,
+                    ensure_ascii=False,
+                    allow_nan=False,
+                )
+                manifest_file.write("\n")
+
+            return dataset
