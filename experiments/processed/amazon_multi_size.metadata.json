@@ -1,0 +1,143 @@
+{
+  "configuration": {
+    "experiment": {
+      "enabled_features": [
+        "degree"
+      ],
+      "feature_names": [
+        "num_vertices",
+        "num_edges",
+        "subgraph_size",
+        "degree_mean",
+        "degree_max",
+        "degree_min",
+        "degree_std"
+      ],
+      "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+      "objective_name": "tds",
+      "target_sizes": [
+        10,
+        20,
+        30,
+        40,
+        50,
+        60,
+        70,
+        80,
+        90,
+        100,
+        110,
+        120,
+        130,
+        140,
+        150,
+        160,
+        170,
+        180,
+        190,
+        200,
+        210,
+        220,
+        230,
+        240,
+        250,
+        260,
+        270,
+        280,
+        290,
+        300,
+        310,
+        320,
+        330,
+        340,
+        350,
+        360,
+        370,
+        380,
+        390,
+        400,
+        410,
+        420,
+        430,
+        440,
+        450,
+        460,
+        470,
+        480,
+        490,
+        500
+      ]
+    },
+    "feature_pipeline": {
+      "features": [
+        {
+          "class": "src.features.graph_features.NumVerticesFeature",
+          "level": "GRAPH",
+          "name": "num_vertices",
+          "parameters": {},
+          "scope": "GLOBAL"
+        },
+        {
+          "class": "src.features.graph_features.NumEdgesFeature",
+          "level": "GRAPH",
+          "name": "num_edges",
+          "parameters": {},
+          "scope": "GLOBAL"
+        },
+        {
+          "class": "src.features.graph_features.SubgraphSizeFeature",
+          "level": "GRAPH",
+          "name": "subgraph_size",
+          "parameters": {},
+          "scope": "LOCAL"
+        },
+        {
+          "class": "src.features.node_features.DegreeFeature",
+          "level": "NODE",
+          "name": "degree",
+          "parameters": {
+            "_scope": "LOCAL"
+          },
+          "scope": "LOCAL"
+        }
+      ],
+      "pooling": [
+        {
+          "feature_name": "num_vertices",
+          "strategies": []
+        },
+        {
+          "feature_name": "num_edges",
+          "strategies": []
+        },
+        {
+          "feature_name": "subgraph_size",
+          "strategies": []
+        },
+        {
+          "feature_name": "degree",
+          "strategies": [
+            {
+              "class": "src.features.pooling.MeanPooling",
+              "name": "mean"
+            },
+            {
+              "class": "src.features.pooling.MaxPooling",
+              "name": "max"
+            },
+            {
+              "class": "src.features.pooling.MinPooling",
+              "name": "min"
+            },
+            {
+              "class": "src.features.pooling.StdPooling",
+              "name": "std"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "csv_sha256": "212e7336b13d212c7ef89ce1079c27b94e31578bdf050f46eae9fe4e8eea120d",
+  "format_version": 1
+}

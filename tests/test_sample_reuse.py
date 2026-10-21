@@ -464,6 +464,7 @@ def test_generation_and_reuse_are_tracked_as_separate_stages(database):
     )
 
     expected_stages = [
+        "graph_fingerprinting_and_compatibility",
         "candidate_retrieval",
         "candidate_generation",
         "candidate_selection_and_association",

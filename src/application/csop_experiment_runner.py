@@ -22,7 +22,11 @@ from src.evaluation.result import EvaluationResult
 from src.experiments.report import ExperimentReport
 from src.features.base import FeatureScope
 from src.features.engine import FeatureEngine
-from src.features.graph_features import NumEdgesFeature, NumVerticesFeature
+from src.features.graph_features import (
+    NumEdgesFeature,
+    NumVerticesFeature,
+    SubgraphSizeFeature,
+)
 from src.features.node_features import (
     AverageNeighborDegreeFeature,
     BetweennessCentralityFeature,
@@ -76,7 +80,10 @@ def _build_feature_set(
     enabled_features: list[str] | None = None,
 ):
     """Resolve a configured feature-set ID to executable components."""
-    if feature_set_id == "graph-size-and-local-degree-v1":
+    if feature_set_id in {
+        "graph-size-and-local-degree-v1",
+        "graph-size-local-degree-and-subgraph-size-v2",
+    }:
         unknown_features = set(enabled_features or ()) - {"degree"}
         if unknown_features:
             raise ValueError(
@@ -85,6 +92,8 @@ def _build_feature_set(
             )
         include_degree = enabled_features is None or "degree" in enabled_features
         features = [NumVerticesFeature(), NumEdgesFeature()]
+        if feature_set_id == "graph-size-local-degree-and-subgraph-size-v2":
+            features.append(SubgraphSizeFeature())
         if include_degree:
             features.append(DegreeFeature(scope=FeatureScope.LOCAL))
         feature_engine = FeatureEngine(
@@ -244,11 +253,17 @@ def _resolve_candidate_samples(
 ) -> tuple[list[SampleRecord], list[str]]:
     """Reuse compatible structures and deterministically generate missing ones."""
     requested_count = generation_config.sample_count
-    graph_digest = graph_fingerprint(graph)
-    compatibility_key, generation_metadata = _sample_compatibility_key(
-        graph_digest,
-        generation_config,
+    fingerprint_stage = (
+        experiment.track_stage("graph_fingerprinting_and_compatibility")
+        if experiment is not None
+        else nullcontext()
     )
+    with fingerprint_stage:
+        graph_digest = graph_fingerprint(graph)
+        compatibility_key, generation_metadata = _sample_compatibility_key(
+            graph_digest,
+            generation_config,
+        )
 
     retrieval_stage = (
         experiment.track_stage("candidate_retrieval")
@@ -451,6 +466,17 @@ def _resolve_output_path(
     return path if path.is_absolute() else _REPOSITORY_ROOT / path
 
 
+class _PrefixedStageTracker:
+    """Add a configuration label to stages in grouped experiment records."""
+
+    def __init__(self, experiment: ExperimentManager, prefix: str) -> None:
+        self._experiment = experiment
+        self._prefix = prefix
+
+    def track_stage(self, stage_name: str):
+        return self._experiment.track_stage(f"{self._prefix}:{stage_name}")
+
+
 def run_experiment(
     config: ExperimentConfig,
     *,
@@ -460,10 +486,26 @@ def run_experiment(
     processed_root: str | Path | None = None,
     model_factory: ModelFactory,
     model_serializer: ModelSerializer | None = None,
+    _shared_experiment: ExperimentManager | None = None,
+    _artifact_prefix: str | None = None,
+    _store_graph_inputs: bool = True,
+    _batch_configs: list[ExperimentConfig] | None = None,
 ) -> str:
-    """Run one experiment described by ExperimentConfig and return its ID."""
+    """Run one configuration or a batch with one model shared across sizes."""
+    batch_configs = sorted(
+        _batch_configs or [config],
+        key=lambda item: item.subgraph_generation.parameters.get(
+            "subgraph_size", 0
+        ),
+    )
+    is_batch = len(batch_configs) > 1
     raw_graph_path = _resolve_graph_path(config)
-    graph_id = config.graph.graph_id or raw_graph_path.name
+    graph_label = config.graph.source or raw_graph_path.name
+    graph_id = (
+        f"{graph_label}_multi_size"
+        if is_batch
+        else config.graph.graph_id or raw_graph_path.name
+    )
     split_config = config.dataset_split
 
     output_paths = {
@@ -514,14 +556,29 @@ def run_experiment(
         features=config.features,
         dataset_split=config.dataset_split,
         model=config.model,
-        name=config.name,
-        description=config.description,
+        name=(
+            f"csop-tds-{graph_label}-shared-model-{len(batch_configs)}-sizes"
+            if is_batch
+            else config.name
+        ),
+        description=(
+            "One LightGBM model trained on the combined candidate datasets "
+            f"for target sizes {[item.subgraph_generation.parameters['subgraph_size'] for item in batch_configs]} on {graph_label}."
+            if is_batch
+            else config.description
+        ),
         random_seed=config.random_seed,
         output={key: str(value) for key, value in output_paths.items()},
     )
 
-    with ExperimentDatabase(output_paths["database_path"]) as database:
-        experiment = ExperimentManager.create(
+    owns_experiment = _shared_experiment is None
+    database_context = (
+        ExperimentDatabase(output_paths["database_path"])
+        if owns_experiment
+        else nullcontext(_shared_experiment.database)
+    )
+    with database_context as database:
+        experiment = _shared_experiment or ExperimentManager.create(
             config=effective_config,
             experiments_root=output_paths["experiments_root"],
             database=database,
@@ -530,103 +587,167 @@ def run_experiment(
         )
         logger = experiment.logger
 
+        if is_batch and owns_experiment:
+            batch_config = {
+                "kind": "csop_shared_model_size_batch",
+                "graph": graph_label,
+                "target_sizes": [
+                    item.subgraph_generation.parameters["subgraph_size"]
+                    for item in batch_configs
+                ],
+                "model_scope": "one model trained on combined sizes",
+                "configurations": [item.to_dict() for item in batch_configs],
+            }
+            experiment.artifact_store.save_json(
+                "config", "batch_config.json", batch_config
+            )
+            experiment.register_artifact(
+                "config", "batch_config.json", "application/json"
+            )
+
+        artifact_prefix = (
+            f"{_artifact_prefix.strip('/')}/"
+            if _artifact_prefix
+            else ""
+        )
+
+        def artifact_name(filename: str) -> str:
+            return f"{artifact_prefix}{filename}"
+
+        def track_stage(stage_name: str):
+            if _artifact_prefix:
+                stage_name = f"{_artifact_prefix}:{stage_name}"
+            return experiment.track_stage(stage_name)
+
         try:
-            with experiment:
+            lifecycle = experiment if owns_experiment else nullcontext(experiment)
+            with lifecycle:
                 logger.info("Experiment ID: %s", experiment.experiment_id)
 
-                with experiment.track_stage("graph_loading"):
+                with track_stage("graph_loading"):
                     graph_loader = GraphLoader(raw_graph_path)
                     graph = graph_loader.load()
 
-                    adjacency_filename = (
-                        "adjlists"
-                        if (raw_graph_path / "adjlists").is_file()
-                        else "adjlist"
-                    )
-                    for filename in ("metadata", adjacency_filename):
-                        source_path = raw_graph_path / filename
-                        stored_path = experiment.artifact_store.copy_file(
-                            "graphs",
-                            f"{graph_id}/{filename}",
-                            source_path,
+                    if _store_graph_inputs:
+                        adjacency_filename = (
+                            "adjlists"
+                            if (raw_graph_path / "adjlists").is_file()
+                            else "adjlist"
                         )
-                        experiment.register_artifact(
+                        for filename in ("metadata", adjacency_filename):
+                            source_path = raw_graph_path / filename
+                            stored_path = experiment.artifact_store.copy_file(
+                                "graphs",
+                                f"{graph_id}/{filename}",
+                                source_path,
+                            )
+                            experiment.register_artifact(
+                                "graphs",
+                                f"{graph_id}/{filename}",
+                                "text/plain",
+                            )
+                            logger.info(
+                                "Registered graph input: %s", stored_path
+                            )
+
+                        _save_json(
+                            experiment,
                             "graphs",
-                            f"{graph_id}/{filename}",
-                            "text/plain",
+                            f"{graph_id}/metadata.json",
+                            {
+                                "graph_id": graph_id,
+                                "source_path": str(raw_graph_path),
+                                "num_vertices": graph.num_vertices,
+                                "num_edges": graph.num_edges,
+                            },
                         )
-                        logger.info("Registered graph input: %s", stored_path)
 
-                    _save_json(
-                        experiment,
-                        "graphs",
-                        f"{graph_id}/metadata.json",
-                        {
-                            "graph_id": graph_id,
-                            "source_path": str(raw_graph_path),
-                            "num_vertices": graph.num_vertices,
-                            "num_edges": graph.num_edges,
-                        },
+                candidate_subgraphs = []
+                sample_ids = []
+                sample_sizes: dict[str, int] = {}
+                for size_config in batch_configs:
+                    size = size_config.subgraph_generation.parameters.get(
+                        "subgraph_size"
+                    )
+                    size_prefix = f"k{size}" if is_batch else None
+                    size_stage_tracker = (
+                        _PrefixedStageTracker(experiment, size_prefix)
+                        if size_prefix
+                        else experiment
+                    )
+                    size_generator = _build_generator(
+                        size_config.subgraph_generation
+                    )
+                    size_graph_id = (
+                        size_config.graph.graph_id or raw_graph_path.name
+                    )
+                    records, origins = _resolve_candidate_samples(
+                        database,
+                        experiment_id=experiment.experiment_id,
+                        graph=graph,
+                        graph_id=size_graph_id,
+                        generation_config=size_config.subgraph_generation,
+                        generator=size_generator,
+                        experiment=size_stage_tracker,
+                    )
+                    size_candidates = [
+                        graph_from_canonical_structure(
+                            {"vertices": record.vertices, "edges": record.edges}
+                        )
+                        for record in records
+                    ]
+                    candidate_subgraphs.extend(size_candidates)
+                    size_sample_ids = [record.sample_id for record in records]
+                    sample_ids.extend(size_sample_ids)
+                    sample_sizes.update(
+                        {sample_id: size for sample_id in size_sample_ids}
                     )
 
-                sample_records, sample_origins = _resolve_candidate_samples(
-                    database,
-                    experiment_id=experiment.experiment_id,
-                    graph=graph,
-                    graph_id=graph_id,
-                    generation_config=effective_config.subgraph_generation,
-                    generator=subgraph_generator,
-                    experiment=experiment,
-                )
-                candidate_subgraphs = [
-                    graph_from_canonical_structure(
-                        {"vertices": record.vertices, "edges": record.edges}
-                    )
-                    for record in sample_records
-                ]
-                sample_ids = [record.sample_id for record in sample_records]
-
-                with experiment.track_stage("candidate_metadata_persistence"):
-                    sample_request = database.get_experiment_sample_request(
-                        experiment.experiment_id
-                    )
-                    _save_json(
-                        experiment,
-                        "metadata",
-                        "sample_request.json",
-                        {
-                            "compatibility_key": sample_request.compatibility_key,
-                            "requested_count": sample_request.requested_count,
-                            "reused_count": sample_request.reused_count,
-                            "generated_count": sample_request.generated_count,
-                            "total_available": sample_request.total_available,
-                            "samples": [
-                                {
-                                    "sample_id": record.sample_id,
-                                    "sequence_index": record.sequence_index,
-                                    "origin": origin,
-                                }
-                                for record, origin in zip(
-                                    sample_records,
-                                    sample_origins,
-                                    strict=True,
-                                )
-                            ],
-                        },
-                    )
+                    with track_stage(
+                        f"{size_prefix + ':' if size_prefix else ''}candidate_metadata_persistence"
+                    ):
+                        request = database.get_experiment_sample_request(
+                            experiment.experiment_id,
+                            records[0].compatibility_key,
+                        )
+                        _save_json(
+                            experiment,
+                            "metadata",
+                            artifact_name(
+                                f"{size_prefix + '/' if size_prefix else ''}sample_request.json"
+                            ),
+                            {
+                                "target_size": size,
+                                "compatibility_key": request.compatibility_key,
+                                "requested_count": request.requested_count,
+                                "reused_count": request.reused_count,
+                                "generated_count": request.generated_count,
+                                "total_available": request.total_available,
+                                "samples": [
+                                    {
+                                        "sample_id": record.sample_id,
+                                        "sequence_index": record.sequence_index,
+                                        "origin": origin,
+                                    }
+                                    for record, origin in zip(
+                                        records, origins, strict=True
+                                    )
+                                ],
+                            },
+                        )
 
                     for record, subgraph, origin in zip(
-                        sample_records,
-                        candidate_subgraphs,
-                        sample_origins,
-                        strict=True,
+                        records, size_candidates, origins, strict=True
                     ):
                         _save_json(
                             experiment,
                             "subgraphs",
-                            f"{graph_id}/{record.sample_id}.json",
+                            artifact_name(
+                                f"{size_prefix + '/' if size_prefix else ''}{size_graph_id}/{record.sample_id}.json"
+                            ),
                             {
-                                "graph_id": graph_id,
+                                "graph_id": size_graph_id,
+                                "target_size": size,
                                 "sample_id": record.sample_id,
                                 "sequence_index": record.sequence_index,
                                 "origin": origin,
@@ -649,6 +770,10 @@ def run_experiment(
                     "feature_names": effective_config.features.feature_names,
                     "enabled_features": effective_config.features.enabled_features,
                     "objective_name": effective_config.features.objective_name,
+                    "target_sizes": [
+                        item.subgraph_generation.parameters.get("subgraph_size")
+                        for item in batch_configs
+                    ],
                 }
                 expected_dataset_configuration = {
                     "feature_pipeline": builder.feature_configuration,
@@ -663,7 +788,7 @@ def run_experiment(
                     candidate_subgraphs=candidate_subgraphs,
                     sample_ids=sample_ids,
                     experiment_metadata=experiment_feature_metadata,
-                    stage_context_factory=experiment.track_stage,
+                    stage_context_factory=track_stage,
                 )
 
                 if not processed_path.is_file():
@@ -672,8 +797,14 @@ def run_experiment(
                     raise RuntimeError(
                         "Generated subgraphs and dataset sample counts differ."
                     )
+                _save_json(
+                    experiment,
+                    "datasets",
+                    artifact_name("sample_sizes.json"),
+                    sample_sizes,
+                )
 
-                with experiment.track_stage("dataset_loading"):
+                with track_stage("dataset_loading"):
                     dataset = DatasetLoader(
                         processed_path,
                         expected_configuration=expected_dataset_configuration,
@@ -687,27 +818,27 @@ def run_experiment(
 
                     stored_dataset = experiment.artifact_store.copy_file(
                         "datasets",
-                        "dataset.csv",
+                        artifact_name("dataset.csv"),
                         processed_path,
                     )
                     experiment.register_artifact(
                         "datasets",
-                        "dataset.csv",
+                        artifact_name("dataset.csv"),
                         "text/csv",
                     )
                     manifest_path = processed_path.with_suffix(".metadata.json")
                     experiment.artifact_store.copy_file(
                         "datasets",
-                        "dataset.metadata.json",
+                        artifact_name("dataset.metadata.json"),
                         manifest_path,
                     )
                     experiment.register_artifact(
                         "datasets",
-                        "dataset.metadata.json",
+                        artifact_name("dataset.metadata.json"),
                         "application/json",
                     )
 
-                with experiment.track_stage("train_validation_test_split"):
+                with track_stage("train_validation_test_split"):
                     train_dataset, validation_dataset, test_dataset = (
                         split_dataset_three_way(
                             dataset,
@@ -732,7 +863,7 @@ def run_experiment(
                     if set.union(*split_ids) != set(dataset.subgraph_ids):
                         raise RuntimeError("Dataset split lost samples.")
 
-                with experiment.track_stage("split_dataset_persistence"):
+                with track_stage("split_dataset_persistence"):
                     datasets_by_split = {
                         "train": train_dataset,
                         "validation": validation_dataset,
@@ -740,7 +871,7 @@ def run_experiment(
                     }
 
                     for split_name, split_part in datasets_by_split.items():
-                        filename = f"{split_name}_dataset.csv"
+                        filename = artifact_name(f"{split_name}_dataset.csv")
                         experiment.artifact_store.save_text(
                             "datasets",
                             filename,
@@ -755,7 +886,7 @@ def run_experiment(
                     _save_json(
                         experiment,
                         "datasets",
-                        "split_metadata.json",
+                        artifact_name("split_metadata.json"),
                         {
                             "strategy": split_config.strategy,
                             "test_ratio": split_config.test_ratio,
@@ -777,7 +908,7 @@ def run_experiment(
                         },
                     )
 
-                with experiment.track_stage("model_training"):
+                with track_stage("model_training"):
                     trained_model = TrainingPipeline(
                         dataset=train_dataset,
                         model=model,
@@ -787,12 +918,12 @@ def run_experiment(
                         model_text = model_serializer(trained_model)
                         experiment.artifact_store.save_text(
                             "models",
-                            "model.txt",
+                            artifact_name("model.txt"),
                             model_text,
                         )
                         experiment.register_artifact(
                             "models",
-                            "model.txt",
+                            artifact_name("model.txt"),
                             "text/plain",
                         )
 
@@ -805,7 +936,7 @@ def run_experiment(
                 metrics_by_split = {}
 
                 for split_name, split_part in datasets_by_split.items():
-                    with experiment.track_stage(
+                    with track_stage(
                         f"{split_name}_evaluation"
                     ) as stage:
                         result = PredictionPipeline(
@@ -833,27 +964,82 @@ def run_experiment(
                             metric_name,
                             metric_value,
                             stage_id=stage.stage_id,
-                            split=split_name,
+                            split=(
+                                f"{_artifact_prefix}:{split_name}"
+                                if _artifact_prefix
+                                else split_name
+                            ),
                         )
 
-                with experiment.track_stage("result_artifact_persistence"):
+                per_size_test_metrics = {}
+                if is_batch:
+                    for size in (
+                        item.subgraph_generation.parameters["subgraph_size"]
+                        for item in batch_configs
+                    ):
+                        size_test_samples = [
+                            sample
+                            for sample in test_dataset.samples
+                            if sample_sizes.get(sample.sample_id) == size
+                        ]
+                        if not size_test_samples:
+                            per_size_test_metrics[str(size)] = {
+                                "num_samples": 0,
+                                "metrics": {},
+                            }
+                            continue
+                        size_test_dataset = Dataset(
+                            size_test_samples, metadata=test_dataset.metadata
+                        )
+                        size_split = f"test:k{size}"
+                        with track_stage(
+                            f"test_evaluation_k{size}_shared_model"
+                        ) as stage:
+                            size_result = PredictionPipeline(
+                                model=trained_model,
+                                dataset=size_test_dataset,
+                                predictor=Predictor(trained_model),
+                                evaluator=Evaluator(),
+                            ).run()
+                            values = _metric_values(size_result.evaluation)
+                            per_size_test_metrics[str(size)] = {
+                                "num_samples": size_result.evaluation.num_samples,
+                                "metrics": values,
+                            }
+                        for metric_name, metric_value in values.items():
+                            if metric_value is not None:
+                                experiment.register_metric(
+                                    metric_name,
+                                    metric_value,
+                                    stage_id=stage.stage_id,
+                                    split=size_split,
+                                )
+
+                with track_stage("result_artifact_persistence"):
                     test_result = results_by_split["test"]
                     predictions_path = experiment.artifact_store.save_text(
                         "predictions",
-                        "predictions.csv",
+                        artifact_name("predictions.csv"),
                         _predictions_to_csv(test_result.predictions),
                     )
                     experiment.register_artifact(
                         "predictions",
-                        predictions_path.name,
+                        artifact_name(predictions_path.name),
                         "text/csv",
                     )
 
                     metrics_path = _save_json(
                         experiment,
                         "evaluation",
-                        "metrics.json",
-                        metrics_by_split,
+                        artifact_name("metrics.json"),
+                        {
+                            **metrics_by_split,
+                            **(
+                                {"test_by_size": per_size_test_metrics}
+                                if is_batch
+                                else {}
+                            ),
+                        },
                     )
 
                     for prediction in test_result.predictions:
@@ -886,7 +1072,7 @@ def run_experiment(
             error_path = _save_json(
                 experiment,
                 "metadata",
-                "error.json",
+                artifact_name("error.json"),
                 {
                     "error_type": type(error).__name__,
                     "message": str(error),
@@ -904,12 +1090,60 @@ def run_experiment(
                 error_path,
             )
 
-            try:
-                ExperimentReport(database).update_xlsx(
-                    output_paths["report_path"],
-                    experiment.experiment_id,
-                )
-            except Exception:
-                logger.exception("Could not update report after experiment failure")
+            if owns_experiment:
+                try:
+                    ExperimentReport(database).update_xlsx(
+                        output_paths["report_path"],
+                        experiment.experiment_id,
+                    )
+                except Exception:
+                    logger.exception(
+                        "Could not update report after experiment failure"
+                    )
 
             raise
+
+
+def run_experiment_batch(
+    configs: Iterable[ExperimentConfig],
+    *,
+    model_factory: ModelFactory,
+    model_serializer: ModelSerializer | None = None,
+) -> str:
+    """Train one model on the combined dataset from multiple target sizes."""
+    selected = list(configs)
+    if not selected:
+        raise ValueError("An experiment batch must contain at least one config.")
+    sizes = [
+        config.subgraph_generation.parameters.get("subgraph_size")
+        for config in selected
+    ]
+    if len(sizes) != len(set(sizes)):
+        raise ValueError("An experiment batch cannot repeat target sizes.")
+
+    first = selected[0]
+    shared = first.to_dict()
+    shared["graph"].pop("graph_id", None)
+    shared["subgraph_generation"]["parameters"].pop("subgraph_size", None)
+    shared["subgraph_generation"]["parameters"].pop("max_attempts", None)
+    shared["name"] = None
+    shared["description"] = None
+    for config in selected[1:]:
+        candidate = config.to_dict()
+        candidate["graph"].pop("graph_id", None)
+        candidate["subgraph_generation"]["parameters"].pop("subgraph_size", None)
+        candidate["subgraph_generation"]["parameters"].pop("max_attempts", None)
+        candidate["name"] = None
+        candidate["description"] = None
+        if candidate != shared:
+            raise ValueError(
+                "Configs in one experiment batch must share graph, sample "
+                "count, generation identity, features, split, model, seed, "
+                "and output settings; only target size and max_attempts may vary."
+            )
+    return run_experiment(
+        first,
+        model_factory=model_factory,
+        model_serializer=model_serializer,
+        _batch_configs=selected,
+    )

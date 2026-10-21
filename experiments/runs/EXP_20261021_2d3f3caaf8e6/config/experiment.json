@@ -1,0 +1,62 @@
+{
+  "dataset_split": {
+    "parameters": {},
+    "random_state": 42,
+    "strategy": "random",
+    "test_ratio": 0.2,
+    "validation_size": 0.25
+  },
+  "description": "One LightGBM model trained on the combined candidate datasets for target sizes [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200] on citeseer.",
+  "features": {
+    "enabled_features": [
+      "degree"
+    ],
+    "feature_names": [
+      "num_vertices",
+      "num_edges",
+      "subgraph_size",
+      "degree_mean",
+      "degree_max",
+      "degree_min",
+      "degree_std"
+    ],
+    "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+    "objective_name": "tds"
+  },
+  "graph": {
+    "graph_id": "citeseer_k10",
+    "parameters": {},
+    "path": null,
+    "source": "citeseer"
+  },
+  "model": {
+    "hyperparameters": {
+      "learning_rate": 0.05,
+      "min_child_samples": 20,
+      "n_estimators": 100,
+      "n_jobs": 1,
+      "num_leaves": 31,
+      "random_state": 42,
+      "verbosity": -1
+    },
+    "model_type": "lightgbm"
+  },
+  "name": "csop-tds-citeseer-shared-model-20-sizes",
+  "output": {
+    "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+    "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+    "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+    "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+  },
+  "random_seed": 42,
+  "subgraph_generation": {
+    "method": "networkx_connected_expansion",
+    "parameters": {
+      "max_attempts": 5000,
+      "subgraph_size": 10
+    },
+    "path_length": null,
+    "sample_count": 100,
+    "seed": 42
+  }
+}

@@ -3,6 +3,27 @@
 from .base import Feature, FeatureContext, FeatureLevel, FeatureScope
 
 
+class SubgraphSizeFeature(Feature):
+	"""Return the number of vertices in the candidate subgraph."""
+
+	@property
+	def name(self) -> str:
+		return "subgraph_size"
+
+	@property
+	def scope(self) -> FeatureScope:
+		return FeatureScope.LOCAL
+
+	@property
+	def level(self) -> FeatureLevel:
+		return FeatureLevel.GRAPH
+
+	def compute(self, context: FeatureContext) -> int:
+		if not isinstance(context, FeatureContext):
+			raise TypeError("context must be a FeatureContext instance.")
+		return context.subgraph.num_vertices
+
+
 class NumVerticesFeature(Feature):
 	"""
 	Computes the number of vertices in the complete graph.

@@ -334,20 +334,72 @@ class ExperimentDatabase:
             );
 
             CREATE TABLE IF NOT EXISTS experiment_sample_requests (
-                experiment_id TEXT PRIMARY KEY,
+                experiment_id TEXT NOT NULL,
                 compatibility_key TEXT NOT NULL,
                 requested_count INTEGER NOT NULL CHECK (requested_count > 0),
                 reused_count INTEGER NOT NULL CHECK (reused_count >= 0),
                 generated_count INTEGER NOT NULL CHECK (generated_count >= 0),
                 total_available INTEGER NOT NULL CHECK (total_available >= 0),
+                PRIMARY KEY (experiment_id, compatibility_key),
                 FOREIGN KEY (experiment_id)
                     REFERENCES experiments(experiment_id)
                     ON DELETE CASCADE
             );
             """
         )
+        self._migrate_sample_requests_to_batch_schema()
         self._migrate_evaluations_to_metrics()
         self._connection.commit()
+
+    def _migrate_sample_requests_to_batch_schema(self) -> None:
+        """Allow one experiment to request samples for multiple configs."""
+        columns = list(
+            self._connection.execute(
+                "PRAGMA table_info(experiment_sample_requests)"
+            )
+        )
+        primary_key = [
+            row["name"]
+            for row in sorted(columns, key=lambda row: row["pk"])
+            if row["pk"] > 0
+        ]
+        if primary_key == ["experiment_id", "compatibility_key"]:
+            return
+        if primary_key != ["experiment_id"]:
+            raise RuntimeError(
+                "Unsupported experiment_sample_requests primary key: "
+                f"{primary_key!r}."
+            )
+
+        self._connection.execute(
+            "ALTER TABLE experiment_sample_requests "
+            "RENAME TO experiment_sample_requests_legacy"
+        )
+        self._connection.execute(
+            """CREATE TABLE experiment_sample_requests (
+                   experiment_id TEXT NOT NULL,
+                   compatibility_key TEXT NOT NULL,
+                   requested_count INTEGER NOT NULL CHECK (requested_count > 0),
+                   reused_count INTEGER NOT NULL CHECK (reused_count >= 0),
+                   generated_count INTEGER NOT NULL CHECK (generated_count >= 0),
+                   total_available INTEGER NOT NULL CHECK (total_available >= 0),
+                   PRIMARY KEY (experiment_id, compatibility_key),
+                   FOREIGN KEY (experiment_id)
+                       REFERENCES experiments(experiment_id)
+                       ON DELETE CASCADE
+               )"""
+        )
+        self._connection.execute(
+            """INSERT INTO experiment_sample_requests
+               (experiment_id, compatibility_key, requested_count,
+                reused_count, generated_count, total_available)
+               SELECT experiment_id, compatibility_key, requested_count,
+                      reused_count, generated_count, total_available
+               FROM experiment_sample_requests_legacy"""
+        )
+        self._connection.execute(
+            "DROP TABLE experiment_sample_requests_legacy"
+        )
 
     def _migrate_evaluations_to_metrics(self) -> None:
         """Copy legacy evaluation rows to metrics, safely on every open."""
@@ -962,12 +1014,17 @@ class ExperimentDatabase:
         generated_count = requested_count - reused_count
         self._ensure_open()
         with self._connection:
+            position_start = self._connection.execute(
+                """SELECT COALESCE(MAX(position) + 1, 0)
+                   FROM experiment_samples WHERE experiment_id = ?""",
+                (experiment_id,),
+            ).fetchone()[0]
             self._connection.executemany(
                 """INSERT INTO experiment_samples
                    (experiment_id, sample_id, position, origin)
                    VALUES (?, ?, ?, ?)""",
                 [
-                    (experiment_id, sample_id, position, origin)
+                    (experiment_id, sample_id, position_start + position, origin)
                     for position, (sample_id, origin) in enumerate(samples)
                 ],
             )
@@ -1012,18 +1069,37 @@ class ExperimentDatabase:
     def get_experiment_sample_request(
         self,
         experiment_id: str,
+        compatibility_key: str | None = None,
     ) -> SampleRequestRecord:
-        """Return requested/reused/generated sample counts for an experiment."""
+        """Return one sample request, optionally selecting its compatibility key."""
         self._ensure_open()
-        row = self._connection.execute(
-            """SELECT experiment_id, compatibility_key, requested_count,
-                      reused_count, generated_count, total_available
-               FROM experiment_sample_requests WHERE experiment_id = ?""",
-            (experiment_id,),
-        ).fetchone()
+        query = """SELECT experiment_id, compatibility_key, requested_count,
+                          reused_count, generated_count, total_available
+                   FROM experiment_sample_requests WHERE experiment_id = ?"""
+        parameters: tuple[str, ...] = (experiment_id,)
+        if compatibility_key is not None:
+            query += " AND compatibility_key = ?"
+            parameters += (compatibility_key,)
+        query += " ORDER BY compatibility_key LIMIT 1"
+        row = self._connection.execute(query, parameters).fetchone()
         if row is None:
             raise KeyError(f"No sample request for experiment {experiment_id}.")
         return self._record(SampleRequestRecord, row)
+
+    def get_experiment_sample_requests(
+        self,
+        experiment_id: str,
+    ) -> list[SampleRequestRecord]:
+        """Return every per-configuration candidate request for an experiment."""
+        self._ensure_open()
+        rows = self._connection.execute(
+            """SELECT experiment_id, compatibility_key, requested_count,
+                      reused_count, generated_count, total_available
+               FROM experiment_sample_requests WHERE experiment_id = ?
+               ORDER BY compatibility_key""",
+            (experiment_id,),
+        ).fetchall()
+        return [self._record(SampleRequestRecord, row) for row in rows]
 
     def get_experiment(self, experiment_id: str) -> ExperimentRecord:
         """Return one experiment or raise KeyError if it is absent."""

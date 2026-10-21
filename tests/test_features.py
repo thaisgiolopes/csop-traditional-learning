@@ -10,6 +10,7 @@ from src.features.base import (
 from src.features.graph_features import (
     NumEdgesFeature,
     NumVerticesFeature,
+    SubgraphSizeFeature,
 )
 from src.features.node_features import DegreeFeature
 
@@ -92,6 +93,16 @@ def test_num_edges_feature_compute():
     result = feature.compute(context)
 
     assert result == 4
+
+
+def test_subgraph_size_feature_uses_candidate_vertices():
+    feature = SubgraphSizeFeature()
+    context = create_test_context()
+
+    assert feature.name == "subgraph_size"
+    assert feature.scope is FeatureScope.LOCAL
+    assert feature.level is FeatureLevel.GRAPH
+    assert feature.compute(context) == 3
 
 
 def test_degree_feature_name():

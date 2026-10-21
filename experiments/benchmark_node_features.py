@@ -10,9 +10,9 @@ from pathlib import Path
 
 import networkx as nx
 
-from src.experiments.feature_benchmark import FeatureExtractionBenchmark
-from src.features.base import FeatureScope
-from src.features.node_features import (
+from ..src.experiments.feature_benchmark import FeatureExtractionBenchmark
+from ..src.features.base import FeatureScope
+from ..src.features.node_features import (
     AverageNeighborDegreeFeature,
     BetweennessCentralityFeature,
     ClosenessCentralityFeature,
