@@ -162,7 +162,7 @@ class ExperimentTracker:
             artifact_id=identifier,
             experiment_id=self.experiment_id,
             category=category,
-            name=Path(filename).name,
+            name=Path(filename).as_posix(),
             path=artifact_path,
             artifact_type=artifact_type,
             size_bytes=artifact_path.stat().st_size,

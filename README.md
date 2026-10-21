@@ -663,6 +663,49 @@ tests/
 
 ---
 
+## Controlled Amazon and CiteSeer Experiments
+
+`experiments.run_csop_experiments` builds configurations from the existing CSOP presets. It supports Amazon and CiteSeer, target sizes from 10 through 500 vertices in steps of 10, configurable candidate counts and seeds, and LightGBM settings. For a selected graph, all selected sizes form one experiment: candidate datasets are combined, the train/test split is applied to that combined dataset, and one LightGBM model is trained across sizes. The `subgraph_size` feature identifies each candidate's size. `list` and `validate` do not run experiments.
+
+Run the 20-sample size-10 pilot for both datasets:
+
+```bash
+python -m experiments.run_csop_experiments pilot --output-root /tmp/csop-pilot
+```
+
+List or validate the full configured batch without executing it:
+
+```bash
+python -m experiments.run_csop_experiments list --all --samples 100
+python -m experiments.run_csop_experiments validate --all --samples 100
+```
+
+Run one experiment, a selected subset, or the explicitly requested full batch:
+
+```bash
+python -m experiments.run_csop_experiments run --graph amazon --size 10 --samples 100 --seed 42
+python -m experiments.run_csop_experiments run --graph amazon --size 10 --size 20 --samples 100 --seed 42
+python -m experiments.run_csop_experiments run --graph amazon --all-sizes --samples 100 --seed 42
+python -m experiments.run_csop_experiments run --all --samples 100 --seed 42
+```
+
+The default output root is `experiments/`. Pass the same `--output-root`
+and seed to let the SQLite candidate store reuse or extend a compatible
+candidate stream. Candidate compatibility includes the graph fingerprint,
+generation method and version, NetworkX version, seed, and sample-defining
+parameters such as target size. For connected expansion, `max_attempts` is an
+execution limit and does not change candidate identity. Processed feature
+datasets are rebuilt for each experiment and checked against their recorded
+feature configuration; the runner does not use them as a candidate cache.
+
+Each experiment stores its effective configuration, environment, candidate
+request and structures, datasets and split IDs, model, predictions, metrics,
+and stage time/RSS measurements. Re-running a selection creates a new
+experiment record; persistence can resume compatible candidate generation,
+not a partially trained model or an interrupted experiment stage.
+
+---
+
 ## Project Status
 
 **Status:** In development.

@@ -1,0 +1,3159 @@
+{
+  "configurations": [
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k10",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k10",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 10
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    },
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k20",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k20",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 20
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    },
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k30",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k30",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 30
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    },
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k40",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k40",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 40
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    },
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k50",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k50",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 50
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    },
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k60",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k60",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 60
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    },
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k70",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k70",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 70
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    },
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k80",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k80",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 80
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    },
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k90",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k90",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 90
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    },
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k100",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k100",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 100
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    },
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k110",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k110",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 110
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    },
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k120",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k120",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 120
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    },
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k130",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k130",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 130
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    },
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k140",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k140",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 140
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    },
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k150",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k150",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 150
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    },
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k160",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k160",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 160
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    },
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k170",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k170",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 170
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    },
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k180",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k180",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 180
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    },
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k190",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k190",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 190
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    },
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k200",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k200",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 200
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    },
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k210",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k210",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 210
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    },
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k220",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k220",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 220
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    },
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k230",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k230",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 230
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    },
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k240",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k240",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 240
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    },
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k250",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k250",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 250
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    },
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k260",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k260",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 260
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    },
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k270",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k270",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 270
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    },
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k280",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k280",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 280
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    },
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k290",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k290",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 290
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    },
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k300",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k300",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 300
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    },
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k310",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k310",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 310
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    },
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k320",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k320",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 320
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    },
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k330",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k330",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 330
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    },
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k340",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k340",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 340
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    },
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k350",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k350",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 350
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    },
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k360",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k360",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 360
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    },
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k370",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k370",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 370
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    },
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k380",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k380",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 380
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    },
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k390",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k390",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 390
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    },
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k400",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k400",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 400
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    },
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k410",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k410",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 410
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    },
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k420",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k420",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 420
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    },
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k430",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k430",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 430
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    },
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k440",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k440",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 440
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    },
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k450",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k450",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 450
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    },
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k460",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k460",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 460
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    },
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k470",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k470",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 470
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    },
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k480",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k480",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 480
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    },
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k490",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k490",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 490
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    },
+    {
+      "dataset_split": {
+        "parameters": {},
+        "random_state": 42,
+        "strategy": "random",
+        "test_ratio": 0.2,
+        "validation_size": 0.25
+      },
+      "description": "LightGBM prediction of TDS for connected induced subgraphs.",
+      "features": {
+        "enabled_features": [
+          "degree"
+        ],
+        "feature_names": [
+          "num_vertices",
+          "num_edges",
+          "subgraph_size",
+          "degree_mean",
+          "degree_max",
+          "degree_min",
+          "degree_std"
+        ],
+        "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+        "objective_name": "tds"
+      },
+      "graph": {
+        "graph_id": "amazon_k500",
+        "parameters": {},
+        "path": null,
+        "source": "amazon"
+      },
+      "model": {
+        "hyperparameters": {
+          "learning_rate": 0.05,
+          "min_child_samples": 20,
+          "n_estimators": 100,
+          "n_jobs": 1,
+          "num_leaves": 31,
+          "random_state": 42,
+          "verbosity": -1
+        },
+        "model_type": "lightgbm"
+      },
+      "name": "csop-tds-amazon-k500",
+      "output": {
+        "database_path": "/home/Thais/IC/csop-traditional-learning/experiments/experiments.sqlite3",
+        "experiments_root": "/home/Thais/IC/csop-traditional-learning/experiments/runs",
+        "processed_root": "/home/Thais/IC/csop-traditional-learning/experiments/processed",
+        "report_path": "/home/Thais/IC/csop-traditional-learning/experiments/reports/experiments.xlsx"
+      },
+      "random_seed": 42,
+      "subgraph_generation": {
+        "method": "networkx_connected_expansion",
+        "parameters": {
+          "max_attempts": 5000,
+          "subgraph_size": 500
+        },
+        "path_length": null,
+        "sample_count": 100,
+        "seed": 42
+      }
+    }
+  ],
+  "graph": "amazon",
+  "kind": "csop_shared_model_size_batch",
+  "model_scope": "one model trained on combined sizes",
+  "target_sizes": [
+    10,
+    20,
+    30,
+    40,
+    50,
+    60,
+    70,
+    80,
+    90,
+    100,
+    110,
+    120,
+    130,
+    140,
+    150,
+    160,
+    170,
+    180,
+    190,
+    200,
+    210,
+    220,
+    230,
+    240,
+    250,
+    260,
+    270,
+    280,
+    290,
+    300,
+    310,
+    320,
+    330,
+    340,
+    350,
+    360,
+    370,
+    380,
+    390,
+    400,
+    410,
+    420,
+    430,
+    440,
+    450,
+    460,
+    470,
+    480,
+    490,
+    500
+  ]
+}
