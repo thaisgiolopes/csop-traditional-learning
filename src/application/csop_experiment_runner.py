@@ -2,6 +2,7 @@
 
 from collections.abc import Callable, Iterable
 from contextlib import nullcontext
+from dataclasses import replace
 import csv
 from hashlib import sha256
 from io import StringIO
@@ -18,6 +19,7 @@ from src.dataset.builder import DatasetBuilder
 from src.dataset.dataset import Dataset
 from src.dataset.loader import DatasetLoader
 from src.dataset.splitter import (
+    split_dataset_by_ordered_groups,
     split_dataset_stratified_kfold,
     split_dataset_three_way,
 )
@@ -456,7 +458,7 @@ def _size_distribution(
     return dict(sorted(counts.items(), key=lambda item: int(item[0])))
 
 
-def _run_stratified_kfold(
+def _run_size_cross_validation(
     *,
     experiment: ExperimentManager,
     config: ExperimentConfig,
@@ -467,25 +469,46 @@ def _run_stratified_kfold(
     artifact_name: Callable[[str], str],
     track_stage: Callable[[str], Any],
 ) -> None:
-    """Evaluate by stratified folds, then persist a final all-data model."""
+    """Evaluate grouped sizes by stratified or forward-only folds."""
     n_splits = config.dataset_split.parameters.get("n_splits", 5)
     strata = [sample_sizes[sample.sample_id] for sample in dataset.samples]
-    folds = split_dataset_stratified_kfold(
-        dataset,
-        strata,
-        n_splits=n_splits,
-        random_state=config.dataset_split.random_state,
-    )
+    if config.dataset_split.strategy == "stratified_kfold":
+        folds = split_dataset_stratified_kfold(
+            dataset,
+            strata,
+            n_splits=n_splits,
+            random_state=config.dataset_split.random_state,
+        )
+    elif config.dataset_split.strategy == "time_series_size":
+        folds = split_dataset_by_ordered_groups(
+            dataset,
+            strata,
+            n_splits=n_splits,
+        )
+    else:
+        raise ValueError(
+            f"Unsupported size-generalization strategy: "
+            f"{config.dataset_split.strategy!r}."
+        )
     fold_records = []
     out_of_fold_predictions: list[PredictionResult] = []
     test_seen: list[str] = []
 
     with track_stage("split_characterization"):
         split_metadata = {
-            "strategy": "stratified_kfold",
-            "stratification_key": "subgraph_size",
+            "strategy": config.dataset_split.strategy,
+            "grouping_key": "subgraph_size",
+            "train_test_order": (
+                "train_sizes_strictly_below_test_sizes"
+                if config.dataset_split.strategy == "time_series_size"
+                else "stratified_random_folds"
+            ),
             "n_splits": n_splits,
-            "random_state": config.dataset_split.random_state,
+            "random_state": (
+                config.dataset_split.random_state
+                if config.dataset_split.strategy == "stratified_kfold"
+                else None
+            ),
             "total_sample_count": dataset.num_samples,
             "total_size_distribution": _size_distribution(dataset, sample_sizes),
             "folds": [],
@@ -510,9 +533,23 @@ def _run_stratified_kfold(
                 }
             )
         expected_ids = [str(sample_id) for sample_id in dataset.subgraph_ids]
-        if sorted(test_seen) != sorted(expected_ids):
+        if config.dataset_split.strategy == "stratified_kfold":
+            expected_evaluation_ids = expected_ids
+        else:
+            tested_sizes = {
+                int(size)
+                for fold in split_metadata["folds"]
+                for size in fold["test_size_distribution"]
+            }
+            expected_evaluation_ids = [
+                str(sample.subgraph_id)
+                for sample in dataset.samples
+                if sample_sizes[sample.sample_id] in tested_sizes
+            ]
+        if sorted(test_seen) != sorted(expected_evaluation_ids):
             raise RuntimeError(
-                "K-fold test partitions do not cover every sample exactly once."
+                "Cross-validation test partitions do not match the expected "
+                "sample coverage."
             )
         _save_json(
             experiment,
@@ -615,7 +652,7 @@ def _run_stratified_kfold(
             "evaluation",
             artifact_name("metrics.json"),
             {
-                "evaluation_method": "stratified_kfold",
+                "evaluation_method": config.dataset_split.strategy,
                 "n_splits": n_splits,
                 "folds": fold_records,
                 "mean": means,
@@ -644,6 +681,7 @@ _REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 _GRAPH_SOURCES = {
     "amazon": _REPOSITORY_ROOT / "data" / "raw" / "amazon",
     "citeseer": _REPOSITORY_ROOT / "data" / "raw" / "citeseer",
+    "patents": _REPOSITORY_ROOT / "data" / "raw" / "patents",
 }
 
 
@@ -751,7 +789,11 @@ def run_experiment(
             f"Unsupported objective: {config.features.objective_name!r}"
         )
 
-    if config.dataset_split.strategy not in {"random", "stratified_kfold"}:
+    if config.dataset_split.strategy not in {
+        "random",
+        "stratified_kfold",
+        "time_series_size",
+    }:
         raise ValueError(
             f"Unknown dataset split strategy: {config.dataset_split.strategy!r}"
         )
@@ -1002,6 +1044,7 @@ def run_experiment(
                 ).run(
                     graph_id=graph_id,
                     output_path=processed_path,
+                    complete_graph=graph,
                     candidate_subgraphs=candidate_subgraphs,
                     sample_ids=sample_ids,
                     experiment_metadata=experiment_feature_metadata,
@@ -1055,8 +1098,11 @@ def run_experiment(
                         "application/json",
                     )
 
-                if split_config.strategy == "stratified_kfold":
-                    _run_stratified_kfold(
+                if split_config.strategy in {
+                    "stratified_kfold",
+                    "time_series_size",
+                }:
+                    _run_size_cross_validation(
                         experiment=experiment,
                         config=effective_config,
                         dataset=dataset,
@@ -1387,3 +1433,446 @@ def run_experiment_batch(
         model_serializer=model_serializer,
         _batch_configs=selected,
     )
+
+
+def _build_transfer_dataset(
+    *,
+    experiment: ExperimentManager,
+    database: ExperimentDatabase,
+    configs: list[ExperimentConfig],
+    role: str,
+    output_paths: dict[str, Path],
+    artifact_name: Callable[[str], str],
+) -> tuple[Dataset, dict[str, int]]:
+    """Generate and persist candidates and features for one transfer graph."""
+    first = configs[0]
+    graph_name = first.graph.source or first.graph.graph_id or role
+    raw_graph_path = _resolve_graph_path(first)
+    graph_loader = GraphLoader(raw_graph_path)
+
+    with experiment.track_stage(f"{role}_{graph_name}_graph_loading"):
+        graph = graph_loader.load()
+        adjacency_filename = (
+            "adjlists" if (raw_graph_path / "adjlists").is_file() else "adjlist"
+        )
+        for filename in ("metadata", adjacency_filename):
+            relative = f"{role}/{graph_name}/{filename}"
+            experiment.artifact_store.copy_file(
+                "graphs", artifact_name(relative), raw_graph_path / filename
+            )
+            experiment.register_artifact(
+                "graphs", artifact_name(relative), "text/plain"
+            )
+
+    candidates: list[Graph] = []
+    sample_ids: list[str] = []
+    sample_sizes: dict[str, int] = {}
+    for config in sorted(
+        configs,
+        key=lambda item: item.subgraph_generation.parameters["subgraph_size"],
+    ):
+        size = config.subgraph_generation.parameters["subgraph_size"]
+        graph_id = config.graph.graph_id or graph_name
+        tracker = _PrefixedStageTracker(
+            experiment, f"{role}_{graph_name}_k{size}"
+        )
+        records, origins = _resolve_candidate_samples(
+            database,
+            experiment_id=experiment.experiment_id,
+            graph=graph,
+            graph_id=graph_id,
+            generation_config=config.subgraph_generation,
+            generator=_build_generator(config.subgraph_generation),
+            experiment=tracker,
+        )
+        size_candidates = [
+            graph_from_canonical_structure(
+                {"vertices": record.vertices, "edges": record.edges}
+            )
+            for record in records
+        ]
+        size_sample_ids = [record.sample_id for record in records]
+        candidates.extend(size_candidates)
+        sample_ids.extend(size_sample_ids)
+        sample_sizes.update(
+            {
+                sample_id: candidate.num_vertices
+                for sample_id, candidate in zip(
+                    size_sample_ids, size_candidates, strict=True
+                )
+            }
+        )
+        request = database.get_experiment_sample_request(
+            experiment.experiment_id,
+            records[0].compatibility_key,
+        )
+        _save_json(
+            experiment,
+            "metadata",
+            artifact_name(f"{role}/{graph_name}/k{size}/sample_request.json"),
+            {
+                "graph": graph_name,
+                "target_size": size,
+                "compatibility_key": request.compatibility_key,
+                "requested_count": request.requested_count,
+                "reused_count": request.reused_count,
+                "generated_count": request.generated_count,
+                "total_available": request.total_available,
+                "samples": [
+                    {
+                        "sample_id": record.sample_id,
+                        "sequence_index": record.sequence_index,
+                        "origin": origin,
+                    }
+                    for record, origin in zip(records, origins, strict=True)
+                ],
+            },
+        )
+        for record, candidate, origin in zip(
+            records, size_candidates, origins, strict=True
+        ):
+            _save_json(
+                experiment,
+                "subgraphs",
+                artifact_name(
+                    f"{role}/{graph_name}/k{size}/{record.sample_id}.json"
+                ),
+                {
+                    "graph_id": graph_id,
+                    "target_size": size,
+                    "sample_id": record.sample_id,
+                    "sequence_index": record.sequence_index,
+                    "origin": origin,
+                    "vertices": sorted(candidate.vertices),
+                    "edges": sorted([sorted(edge) for edge in candidate.edges]),
+                },
+            )
+
+    feature_engine, pooling_strategies = _build_feature_set(
+        first.features.feature_set_id,
+        first.features.enabled_features,
+    )
+    builder = DatasetBuilder(
+        graph_loader=graph_loader,
+        subgraph_generator=_build_generator(first.subgraph_generation),
+        feature_engine=feature_engine,
+        pooling_strategies=pooling_strategies,
+        objective_function=TDSObjective(),
+    )
+    feature_metadata = {
+        "feature_set_id": first.features.feature_set_id,
+        "feature_names": first.features.feature_names,
+        "enabled_features": first.features.enabled_features,
+        "objective_name": first.features.objective_name,
+        "target_sizes": sorted(
+            item.subgraph_generation.parameters["subgraph_size"]
+            for item in configs
+        ),
+    }
+    expected_configuration = {
+        "feature_pipeline": builder.feature_configuration,
+        "experiment": feature_metadata,
+    }
+    processed_path = output_paths["processed_root"] / (
+        f"{experiment.experiment_id}_{role}_{graph_name}.csv"
+    )
+    with experiment.track_stage(f"{role}_{graph_name}_feature_extraction"):
+        built = DatasetPipeline(
+            dataset_builder=builder,
+            processed_dir=output_paths["processed_root"],
+        ).run(
+            graph_id=f"{role}_{graph_name}_multi_size",
+            output_path=processed_path,
+            complete_graph=graph,
+            candidate_subgraphs=candidates,
+            sample_ids=sample_ids,
+            experiment_metadata=feature_metadata,
+            stage_context_factory=experiment.track_stage,
+        )
+    if built.num_samples != len(sample_ids):
+        raise RuntimeError(
+            f"{role} graph dataset sample count differs from candidate count."
+        )
+
+    loaded = DatasetLoader(
+        processed_path,
+        expected_configuration=expected_configuration,
+    ).load()
+    if loaded.feature_names != first.features.feature_names:
+        raise ValueError(
+            f"Configured feature names do not match {role} graph dataset: "
+            f"{loaded.feature_names!r}."
+        )
+    filename = f"{role}_{graph_name}_dataset.csv"
+    experiment.artifact_store.copy_file(
+        "datasets", artifact_name(filename), processed_path
+    )
+    experiment.register_artifact(
+        "datasets", artifact_name(filename), "text/csv"
+    )
+    manifest_name = f"{role}_{graph_name}_dataset.metadata.json"
+    experiment.artifact_store.copy_file(
+        "datasets",
+        artifact_name(manifest_name),
+        processed_path.with_suffix(".metadata.json"),
+    )
+    experiment.register_artifact(
+        "datasets", artifact_name(manifest_name), "application/json"
+    )
+    return loaded, sample_sizes
+
+
+def run_graph_transfer_experiment(
+    configs: Iterable[ExperimentConfig],
+    *,
+    train_graph: str,
+    test_graph: str,
+    model_factory: ModelFactory,
+    model_serializer: ModelSerializer | None = None,
+) -> str:
+    """Train on one graph and evaluate on a separate, unseen input graph."""
+    if train_graph == test_graph:
+        raise ValueError("Training and test graphs must differ.")
+    selected = list(configs)
+    train_configs = sorted(
+        [config for config in selected if config.graph.source == train_graph],
+        key=lambda item: item.subgraph_generation.parameters["subgraph_size"],
+    )
+    test_configs = sorted(
+        [config for config in selected if config.graph.source == test_graph],
+        key=lambda item: item.subgraph_generation.parameters["subgraph_size"],
+    )
+    if not train_configs or not test_configs:
+        raise ValueError("Configs must include both selected transfer graphs.")
+    if [c.subgraph_generation.parameters["subgraph_size"] for c in train_configs] != [
+        c.subgraph_generation.parameters["subgraph_size"] for c in test_configs
+    ]:
+        raise ValueError("Training and test graphs must use identical target sizes.")
+
+    first = train_configs[0]
+    shared_reference = first.to_dict()
+    shared_reference["graph"] = {}
+    shared_reference["name"] = None
+    shared_reference["description"] = None
+    shared_reference["subgraph_generation"]["parameters"].pop("subgraph_size", None)
+    shared_reference["subgraph_generation"]["parameters"].pop("max_attempts", None)
+    for config in train_configs + test_configs:
+        candidate = config.to_dict()
+        candidate["graph"] = {}
+        candidate["name"] = None
+        candidate["description"] = None
+        candidate["subgraph_generation"]["parameters"].pop("subgraph_size", None)
+        candidate["subgraph_generation"]["parameters"].pop("max_attempts", None)
+        if candidate != shared_reference:
+            raise ValueError(
+                "Transfer configs must share sample count, generation method, "
+                "features, model, seed, and output settings."
+            )
+
+    output_paths = {
+        key: _resolve_output_path(first.output.get(key), None, key)
+        for key in (
+            "experiments_root",
+            "database_path",
+            "report_path",
+            "processed_root",
+        )
+    }
+    transfer_config = ExperimentConfig(
+        graph=first.graph,
+        subgraph_generation=first.subgraph_generation,
+        features=first.features,
+        dataset_split=replace(
+            first.dataset_split,
+            strategy="graph_transfer",
+            test_ratio=None,
+            validation_size=None,
+            parameters={"train_graph": train_graph, "test_graph": test_graph},
+        ),
+        model=first.model,
+        name=f"csop-tds-transfer-{train_graph}-to-{test_graph}",
+        description=(
+            f"Train on graph {train_graph}; evaluate on unseen graph {test_graph} "
+            f"for sizes {[c.subgraph_generation.parameters['subgraph_size'] for c in train_configs]}."
+        ),
+        random_seed=first.random_seed,
+        output={key: str(value) for key, value in output_paths.items()},
+    )
+    with ExperimentDatabase(output_paths["database_path"]) as database:
+        experiment = ExperimentManager.create(
+            config=transfer_config,
+            experiments_root=output_paths["experiments_root"],
+            database=database,
+            report_path=output_paths["report_path"],
+            console_logging=False,
+        )
+        batch_config = {
+            "kind": "graph_transfer",
+            "train_graph": train_graph,
+            "test_graph": test_graph,
+            "target_sizes": [
+                config.subgraph_generation.parameters["subgraph_size"]
+                for config in train_configs
+            ],
+            "model_scope": "fit on training graph only",
+            "configurations": [config.to_dict() for config in selected],
+            "transfer_split": transfer_config.dataset_split.to_dict()
+            if hasattr(transfer_config.dataset_split, "to_dict")
+            else {
+                "strategy": "graph_transfer",
+                "train_graph": train_graph,
+                "test_graph": test_graph,
+            },
+        }
+        experiment.artifact_store.save_json(
+            "config", "transfer_config.json", batch_config
+        )
+        experiment.register_artifact(
+            "config", "transfer_config.json", "application/json"
+        )
+        with experiment:
+            train_dataset, train_sample_sizes = _build_transfer_dataset(
+                experiment=experiment,
+                database=database,
+                configs=train_configs,
+                role="train",
+                output_paths=output_paths,
+                artifact_name=lambda filename: filename,
+            )
+            test_dataset, test_sample_sizes = _build_transfer_dataset(
+                experiment=experiment,
+                database=database,
+                configs=test_configs,
+                role="test",
+                output_paths=output_paths,
+                artifact_name=lambda filename: filename,
+            )
+            if train_dataset.feature_names != test_dataset.feature_names:
+                raise ValueError("Transfer graph feature schemas do not match.")
+            train_sample_ids = {sample.sample_id for sample in train_dataset.samples}
+            test_sample_ids = {sample.sample_id for sample in test_dataset.samples}
+            if train_sample_ids & test_sample_ids:
+                raise RuntimeError("Training and test graph samples overlap.")
+
+            with experiment.track_stage("graph_transfer_split_characterization"):
+                _save_json(
+                    experiment,
+                    "datasets",
+                    "split_metadata.json",
+                    {
+                        "strategy": "graph_transfer",
+                        "train_graph": train_graph,
+                        "test_graph": test_graph,
+                        "train_sample_count": train_dataset.num_samples,
+                        "test_sample_count": test_dataset.num_samples,
+                        "train_size_distribution": _size_distribution(
+                            train_dataset, train_sample_sizes
+                        ),
+                        "test_size_distribution": _size_distribution(
+                            test_dataset, test_sample_sizes
+                        ),
+                        "train_sample_ids": sorted(train_sample_ids),
+                        "test_sample_ids": sorted(test_sample_ids),
+                    },
+                )
+
+            with experiment.track_stage("graph_transfer_model_training"):
+                model = model_factory(transfer_config.model)
+                model = TrainingPipeline(
+                    dataset=train_dataset,
+                    model=model,
+                ).run()
+                if model_serializer is not None:
+                    experiment.artifact_store.save_text(
+                        "models", "model.txt", model_serializer(model)
+                    )
+                    experiment.register_artifact(
+                        "models", "model.txt", "text/plain"
+                    )
+
+            with experiment.track_stage("unseen_graph_evaluation") as stage:
+                result = PredictionPipeline(
+                    model=model,
+                    dataset=test_dataset,
+                    predictor=Predictor(model),
+                    evaluator=Evaluator(),
+                ).run()
+                metrics = _metric_values(result.evaluation)
+            for metric_name, metric_value in metrics.items():
+                if metric_value is not None:
+                    experiment.register_metric(
+                        metric_name,
+                        metric_value,
+                        stage_id=stage.stage_id,
+                        split="test_unseen_graph",
+                    )
+
+            metrics_by_size = {}
+            for size in sorted(set(test_sample_sizes.values())):
+                size_samples = [
+                    sample
+                    for sample in test_dataset.samples
+                    if test_sample_sizes[sample.sample_id] == size
+                ]
+                size_dataset = Dataset(size_samples, metadata=test_dataset.metadata)
+                with experiment.track_stage(
+                    f"unseen_graph_evaluation_k{size}"
+                ) as size_stage:
+                    size_result = PredictionPipeline(
+                        model=model,
+                        dataset=size_dataset,
+                        predictor=Predictor(model),
+                        evaluator=Evaluator(),
+                    ).run()
+                    size_metrics = _metric_values(size_result.evaluation)
+                    metrics_by_size[str(size)] = {
+                        "num_samples": size_dataset.num_samples,
+                        "metrics": size_metrics,
+                    }
+                for metric_name, metric_value in size_metrics.items():
+                    if metric_value is not None:
+                        experiment.register_metric(
+                            metric_name,
+                            metric_value,
+                            stage_id=size_stage.stage_id,
+                            split=f"test_unseen_graph:k{size}",
+                        )
+
+            with experiment.track_stage("graph_transfer_result_persistence"):
+                predictions_path = experiment.artifact_store.save_text(
+                    "predictions",
+                    "predictions.csv",
+                    _predictions_to_csv(result.predictions),
+                )
+                experiment.register_artifact(
+                    "predictions", "predictions.csv", "text/csv"
+                )
+                _save_json(
+                    experiment,
+                    "evaluation",
+                    "metrics.json",
+                    {
+                        "evaluation_method": "graph_transfer",
+                        "train_graph": train_graph,
+                        "test_graph": test_graph,
+                        "num_samples": test_dataset.num_samples,
+                        "metrics": metrics,
+                        "test_by_size": metrics_by_size,
+                    },
+                )
+                for prediction in result.predictions:
+                    actual = prediction.true_target
+                    experiment.register_prediction(
+                        sample_id=(
+                            prediction.sample_id
+                            or f"{prediction.graph_id}:{prediction.subgraph_id}"
+                        ),
+                        predicted_value=prediction.predicted_target,
+                        actual_value=actual,
+                        prediction_error=(
+                            prediction.predicted_target - actual
+                            if actual is not None
+                            else None
+                        ),
+                    )
+    return experiment.experiment_id

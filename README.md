@@ -663,9 +663,9 @@ tests/
 
 ---
 
-## Controlled Amazon and CiteSeer Experiments
+## Controlled Graph Experiments
 
-`experiments.run_csop_experiments` builds configurations from the existing CSOP presets. It supports Amazon and CiteSeer, target sizes from 10 through 500 vertices in steps of 10, configurable candidate counts and seeds, and LightGBM settings. For a selected graph, all selected sizes form one experiment: candidate datasets are combined, five-fold stratified cross-validation is applied to that dataset by subgraph size, and one LightGBM model is fit per fold. A final model is then fit on all samples for later prediction. The `subgraph_size` feature identifies each candidate's size. `list` and `validate` do not run experiments.
+`experiments.run_csop_experiments` builds configurations from the existing CSOP presets. It supports Amazon, CiteSeer, and Patents, target sizes from 10 through 500 vertices in steps of 10, configurable candidate counts and seeds, and LightGBM settings. For a selected graph, all selected sizes form one experiment: candidate datasets are combined, five-fold stratified cross-validation is applied by default, and one LightGBM model is fit per fold. A final model is then fit on all samples for later prediction. `--split-strategy time_series_size` instead uses forward folds over ordered, equally spaced sizes, so each test fold contains larger sizes than its training fold. The `subgraph_size` feature identifies each candidate's size. `list` and `validate` do not run experiments.
 
 Run the 20-sample size-10 pilot for both datasets:
 
@@ -688,6 +688,34 @@ python -m experiments.run_csop_experiments run --graph amazon --size 10 --size 2
 python -m experiments.run_csop_experiments run --graph amazon --all-sizes --samples 100 --seed 42
 python -m experiments.run_csop_experiments run --all --samples 100 --seed 42
 ```
+
+Measure generalization to larger sizes on one graph using forward folds:
+
+```bash
+python -m experiments.run_csop_experiments validate --graph amazon \
+  --all-sizes --samples 100 --seed 42 \
+  --split-strategy time_series_size --folds 5
+python -m experiments.run_csop_experiments run --graph amazon \
+  --all-sizes --samples 100 --seed 42 \
+  --split-strategy time_series_size --folds 5
+```
+
+Measure transfer to an unseen input graph with a source-only model:
+
+```bash
+python -m experiments.run_csop_experiments transfer validate \
+  --train-graph amazon --test-graph patents --all-sizes --samples 100 --seed 42
+python -m experiments.run_csop_experiments transfer run \
+  --train-graph amazon --test-graph patents --all-sizes --samples 100 --seed 42
+```
+
+The size-forward experiment evaluates the later size groups and records each
+fold's train/test size counts. The graph-transfer experiment extracts separate
+datasets for the source and target graphs, trains only on the source, and
+reports metrics on the unseen graph overall and by size. Patents contains over
+2.7 million vertices; `validate` reads only its metadata, while `run` loads the
+full graph and can require substantial memory and time. Neither validation
+command starts an experiment.
 
 Select a subset of node features by repeating `--node-feature`. The available
 values are `degree`, `pagerank`, `betweenness_centrality`,

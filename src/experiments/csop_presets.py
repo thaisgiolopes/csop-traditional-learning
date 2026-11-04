@@ -12,7 +12,7 @@ from .config import (
     SubgraphGenerationConfig,
 )
 
-SUPPORTED_DATASETS = ("amazon", "citeseer")
+SUPPORTED_DATASETS = ("amazon", "citeseer", "patents")
 SUPPORTED_SUBGRAPH_SIZES = tuple(range(10, 501, 10))
 
 BASE_FEATURE_NAMES = [
@@ -73,6 +73,7 @@ def build_csop_configs(
     node_features: Iterable[str] = ("degree",),
     node_scope: str = "local",
     n_splits: int = 5,
+    split_strategy: str = "stratified_kfold",
     output_paths: Mapping[str, str] | None = None,
 ) -> list[ExperimentConfig]:
     """Build one reproducible TDS experiment config per dataset and size."""
@@ -170,10 +171,12 @@ def build_csop_configs(
                         objective_name="tds",
                     ),
                     dataset_split=DatasetSplitConfig(
-                        strategy="stratified_kfold",
+                        strategy=split_strategy,
                         test_ratio=None,
                         validation_size=None,
-                        random_state=seed,
+                        random_state=(
+                            seed if split_strategy == "stratified_kfold" else None
+                        ),
                         parameters={"n_splits": n_splits},
                     ),
                     model=ModelConfig(

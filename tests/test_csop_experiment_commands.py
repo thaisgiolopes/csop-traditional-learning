@@ -231,5 +231,50 @@ def test_selected_node_features_match_runner_output_schema():
 def test_list_all_expands_full_configured_batch(monkeypatch, capsys):
     assert run_csop_experiments.main(["list", "--all", "--samples", "20"]) == 0
     output = capsys.readouterr().out
-    assert output.count("csop-tds-") == 100
-    assert "100 experiment configuration(s) listed; none executed." in output
+    assert output.count("csop-tds-") == 150
+    assert "150 experiment configuration(s) listed; none executed." in output
+
+
+def test_time_series_size_validation_requires_equal_spacing_and_more_sizes_than_folds(
+    capsys,
+):
+    assert run_csop_experiments.main(
+        [
+            "validate",
+            "--graph", "amazon",
+            "--size", "10", "--size", "20", "--size", "30",
+            "--size", "40", "--size", "50", "--size", "60",
+            "--samples", "20",
+            "--split-strategy", "time_series_size",
+            "--folds", "5",
+        ]
+    ) == 0
+    output = capsys.readouterr().out
+    assert "split=time_series_size({'n_splits': 5})" in output
+    assert "6 experiment configuration(s) validated" in output
+
+
+def test_transfer_validation_reads_metadata_without_running_experiment(
+    monkeypatch,
+    capsys,
+):
+    monkeypatch.setattr(
+        run_csop_experiments,
+        "run_graph_transfer_experiment",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("transfer executed during validation")
+        ),
+    )
+    assert run_csop_experiments.main(
+        [
+            "transfer", "validate",
+            "--train-graph", "amazon",
+            "--test-graph", "patents",
+            "--size", "10", "--size", "20",
+            "--samples", "20",
+        ]
+    ) == 0
+    output = capsys.readouterr().out
+    assert "graph=patents (V=2745761, E=13965409)" in output
+    assert "One model will train on amazon and evaluate on unseen graph patents" in output
+    assert "4 graph/size configurations validated; none executed." in output

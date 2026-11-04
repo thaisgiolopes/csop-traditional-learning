@@ -23,7 +23,10 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from src.application.csop_experiment_runner import run_experiment_batch
+from src.application.csop_experiment_runner import (
+    run_experiment_batch,
+    run_graph_transfer_experiment,
+)
 from src.experiments.csop_presets import (
     AVAILABLE_NODE_FEATURES,
     SUPPORTED_DATASETS,
@@ -37,6 +40,7 @@ from src.model.lightgbm_model import LightGBMModel
 # _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 _PILOT_SAMPLE_COUNT = 20
 _PILOT_SIZE = 10
+_PILOT_DATASETS = ("amazon", "citeseer")
 
 
 def _add_selection_arguments(parser: argparse.ArgumentParser) -> None:
@@ -67,7 +71,11 @@ def _add_selection_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def _add_run_arguments(parser: argparse.ArgumentParser) -> None:
+def _add_run_arguments(
+    parser: argparse.ArgumentParser,
+    *,
+    include_split_options: bool = True,
+) -> None:
     parser.add_argument("--samples", type=int)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--max-attempts", type=int, default=5_000)
@@ -77,12 +85,22 @@ def _add_run_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--num-leaves", type=int, default=31)
     parser.add_argument("--min-child-samples", type=int, default=20)
     parser.add_argument("--model-jobs", type=int, default=1)
-    parser.add_argument(
-        "--folds",
-        type=int,
-        default=5,
-        help="Number of stratified folds used for evaluation (default: 5).",
-    )
+    if include_split_options:
+        parser.add_argument(
+            "--folds",
+            type=int,
+            default=5,
+            help="Number of folds used for evaluation (default: 5).",
+        )
+        parser.add_argument(
+            "--split-strategy",
+            choices=("stratified_kfold", "time_series_size"),
+            default="stratified_kfold",
+            help=(
+                "Use random stratified folds or forward folds by ordered "
+                "subgraph size."
+            ),
+        )
     feature_group = parser.add_mutually_exclusive_group()
     feature_group.add_argument(
         "--node-feature",
@@ -191,6 +209,7 @@ def _build_configs(
     node_features: Sequence[str] = ("degree",),
     node_scope: str = "local",
     folds: int = 5,
+    split_strategy: str = "stratified_kfold",
 ) -> list[ExperimentConfig]:
     if not 0 <= seed <= 2**32 - 1:
         raise ValueError("--seed must be between 0 and 4294967295.")
@@ -200,13 +219,23 @@ def _build_configs(
         )
     if folds < 2:
         raise ValueError("--folds must be at least 2.")
-    if samples < folds:
+    if split_strategy == "stratified_kfold" and samples < folds:
         raise ValueError(
             "--samples must be at least --folds so every size is represented "
             "in each stratified test fold."
         )
     if max_attempts <= 0:
         raise ValueError("--max-attempts must be positive.")
+    if split_strategy == "time_series_size":
+        ordered_sizes = sorted(sizes)
+        if len(ordered_sizes) <= folds:
+            raise ValueError(
+                "time_series_size requires more selected sizes than folds."
+            )
+        if len({right - left for left, right in zip(ordered_sizes, ordered_sizes[1:])}) != 1:
+            raise ValueError(
+                "time_series_size requires equally spaced target sizes."
+            )
     return build_csop_configs(
         datasets=graphs,
         subgraph_sizes=sizes,
@@ -217,6 +246,7 @@ def _build_configs(
         node_features=node_features,
         node_scope=node_scope,
         n_splits=folds,
+        split_strategy=split_strategy,
         output_paths=_output_paths(output_root),
     )
 
@@ -246,7 +276,10 @@ def _validate_config(config: ExperimentConfig) -> tuple[int, int]:
 
     sample_count = config.subgraph_generation.sample_count
     folds = config.dataset_split.parameters.get("n_splits", 5)
-    if sample_count < folds:
+    if (
+        config.dataset_split.strategy == "stratified_kfold"
+        and sample_count < folds
+    ):
         raise ValueError(
             f"{config.graph.source} k={target_size}: samples ({sample_count}) "
             f"must be at least folds ({folds})."
@@ -313,6 +346,35 @@ def _parser() -> argparse.ArgumentParser:
         help="Select a graph; defaults to both Amazon and CiteSeer.",
     )
     _add_run_arguments(pilot_parser)
+
+    transfer_parser = subparsers.add_parser(
+        "transfer",
+        help="Train on one graph and evaluate on a different graph.",
+    )
+    transfer_actions = transfer_parser.add_subparsers(
+        dest="transfer_action", required=True
+    )
+    for action in ("list", "validate", "run"):
+        action_parser = transfer_actions.add_parser(action)
+        action_parser.add_argument(
+            "--train-graph", required=True, choices=SUPPORTED_DATASETS
+        )
+        action_parser.add_argument(
+            "--test-graph", required=True, choices=SUPPORTED_DATASETS
+        )
+        action_parser.add_argument(
+            "--size",
+            dest="sizes",
+            action="append",
+            type=int,
+            choices=SUPPORTED_SUBGRAPH_SIZES,
+        )
+        action_parser.add_argument(
+            "--all-sizes",
+            action="store_true",
+            help="Select sizes 10, 20, ..., 500.",
+        )
+        _add_run_arguments(action_parser, include_split_options=False)
     return parser
 
 
@@ -320,9 +382,71 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = _parser()
     args = parser.parse_args(argv)
     try:
+        if args.command == "transfer":
+            if args.train_graph == args.test_graph:
+                raise ValueError("--train-graph and --test-graph must differ.")
+            if args.all_sizes and args.sizes:
+                raise ValueError("--all-sizes cannot be combined with --size.")
+            sizes = (
+                list(SUPPORTED_SUBGRAPH_SIZES)
+                if args.all_sizes
+                else list(args.sizes or ())
+            )
+            if not sizes:
+                raise ValueError("Select target sizes with --size or --all-sizes.")
+            if len(sizes) != len(set(sizes)):
+                raise ValueError("Target-size selections must not contain duplicates.")
+            output_root = args.output_root or Path(
+                f"experiments/csop-transfer-{args.train_graph}-to-{args.test_graph}"
+            )
+            node_features = (
+                [] if args.no_node_features else args.node_features or ["degree"]
+            )
+            transfer_configs = _build_configs(
+                graphs=[args.train_graph, args.test_graph],
+                sizes=sizes,
+                samples=args.samples if args.samples is not None else 100,
+                seed=args.seed,
+                max_attempts=args.max_attempts,
+                output_root=output_root,
+                model_parameters=_model_parameters(args),
+                node_features=node_features,
+                node_scope=args.node_scope,
+                folds=5,
+                split_strategy="stratified_kfold",
+            )
+            validated = [
+                (config, *_validate_config(config))
+                for config in transfer_configs
+            ]
+            if args.transfer_action in {"list", "validate"}:
+                for config, vertex_count, edge_count in validated:
+                    print(_describe(config, vertex_count, edge_count))
+                verb = "listed" if args.transfer_action == "list" else "validated"
+                print(
+                    f"{len(transfer_configs)} graph/size configurations {verb}; "
+                    "none executed. One model will train on "
+                    f"{args.train_graph} and evaluate on unseen graph "
+                    f"{args.test_graph}."
+                )
+                return 0
+            experiment_id = run_graph_transfer_experiment(
+                transfer_configs,
+                train_graph=args.train_graph,
+                test_graph=args.test_graph,
+                model_factory=lambda model_config: LightGBMModel(
+                    **model_config.hyperparameters
+                ),
+                model_serializer=lambda model: (
+                    model._estimator.booster_.model_to_string()
+                ),
+            )
+            print(f"Completed {experiment_id}", flush=True)
+            return 0
+
         pilot = args.command == "pilot"
         if pilot:
-            graphs = list(args.graphs or SUPPORTED_DATASETS)
+            graphs = list(args.graphs or _PILOT_DATASETS)
             if len(graphs) != len(set(graphs)):
                 raise ValueError("Graph selections must not contain duplicates.")
             sizes = [_PILOT_SIZE]
@@ -361,6 +485,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             node_features=node_features,
             node_scope=args.node_scope,
             folds=args.folds,
+            split_strategy=args.split_strategy,
         )
 
         validated = []

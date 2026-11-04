@@ -9,8 +9,11 @@ import numpy as np
 import pytest
 from openpyxl import load_workbook
 
-from src.application.csop_experiment_runner import run_experiment
-from src.application.csop_experiment_runner import run_experiment_batch
+from src.application.csop_experiment_runner import (
+    run_experiment,
+    run_experiment_batch,
+    run_graph_transfer_experiment,
+)
 from src.experiments.config import (
     DatasetSplitConfig,
     ExperimentConfig,
@@ -39,9 +42,9 @@ FEATURE_NAMES = [
 ]
 
 
-def _write_graph(path: Path) -> nx.Graph:
+def _write_graph(path: Path, seed: int = SEED) -> nx.Graph:
     """Write a reproducible, small graph in the GraphLoader input format."""
-    graph = nx.gnp_random_graph(10, 0.42, seed=SEED)
+    graph = nx.gnp_random_graph(10, 0.42, seed=seed)
     assert nx.is_connected(graph)
     path.mkdir(parents=True)
     (path / "metadata").write_text(
@@ -417,3 +420,152 @@ def test_grouped_sizes_train_one_shared_model_and_persist_size_metrics(tmp_path)
     finally:
         workbook.close()
     assert [row[0] for row in experiment_rows] == [experiment_id]
+
+
+def test_time_series_size_generalization_never_trains_on_larger_sizes(tmp_path):
+    graph_path = tmp_path / "ordered-size-graph"
+    _write_graph(graph_path)
+    root = tmp_path / "ordered-size"
+    configs = []
+    for size in (2, 3, 4, 5):
+        config = _config(graph_path)
+        config.name = f"ordered-k{size}"
+        config.graph.graph_id = f"ordered_k{size}"
+        config.subgraph_generation.sample_count = 12
+        config.subgraph_generation.parameters["subgraph_size"] = size
+        config.features.feature_set_id = (
+            "graph-size-node-structure-local-with-subgraph-size-v1"
+        )
+        config.features.feature_names = [
+            "num_vertices", "num_edges", "subgraph_size",
+            "degree_mean", "degree_max", "degree_min", "degree_std",
+        ]
+        config.features.enabled_features = ["degree"]
+        config.dataset_split = DatasetSplitConfig(
+            strategy="time_series_size",
+            test_ratio=None,
+            validation_size=None,
+            random_state=SEED,
+            parameters={"n_splits": 2},
+        )
+        config.output = {
+            "experiments_root": str(root / "runs"),
+            "database_path": str(root / "experiments.sqlite3"),
+            "report_path": str(root / "reports" / "experiments.xlsx"),
+            "processed_root": str(root / "processed"),
+        }
+        configs.append(config)
+
+    experiment_id = run_experiment_batch(
+        configs,
+        model_factory=lambda model_config: LightGBMModel(
+            **model_config.hyperparameters
+        ),
+    )
+    experiment_root = root / "runs" / experiment_id
+    split_metadata = json.loads(
+        (experiment_root / "datasets" / "split_metadata.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert split_metadata["strategy"] == "time_series_size"
+    assert len(split_metadata["folds"]) == 2
+    for fold in split_metadata["folds"]:
+        train_sizes = [int(value) for value in fold["train_size_distribution"]]
+        test_sizes = [int(value) for value in fold["test_size_distribution"]]
+        assert max(train_sizes) < min(test_sizes)
+    metrics = json.loads(
+        (experiment_root / "evaluation" / "metrics.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert metrics["evaluation_method"] == "time_series_size"
+    assert [fold["metrics"]["r2"] for fold in metrics["folds"]]
+    assert metrics["mean"]["r2"] == pytest.approx(
+        sum(fold["metrics"]["r2"] for fold in metrics["folds"]) / 2
+    )
+
+
+def test_graph_transfer_trains_only_on_source_and_tests_unseen_graph(tmp_path):
+    train_path = tmp_path / "source-graph"
+    test_path = tmp_path / "unseen-graph"
+    _write_graph(train_path, seed=29)
+    _write_graph(test_path, seed=31)
+    root = tmp_path / "graph-transfer"
+    configs = []
+    for source, graph_path in (
+        ("source_graph", train_path),
+        ("unseen_graph", test_path),
+    ):
+        for size in (3, 4):
+            config = _config(graph_path)
+            config.name = f"transfer-{source}-k{size}"
+            config.graph.graph_id = f"{source}_k{size}"
+            config.graph.source = source
+            config.subgraph_generation.sample_count = 12
+            config.subgraph_generation.parameters["subgraph_size"] = size
+            config.features.feature_set_id = (
+                "graph-size-node-structure-local-with-subgraph-size-v1"
+            )
+            config.features.feature_names = [
+                "num_vertices", "num_edges", "subgraph_size",
+                "degree_mean", "degree_max", "degree_min", "degree_std",
+            ]
+            config.features.enabled_features = ["degree"]
+            config.output = {
+                "experiments_root": str(root / "runs"),
+                "database_path": str(root / "experiments.sqlite3"),
+                "report_path": str(root / "reports" / "experiments.xlsx"),
+                "processed_root": str(root / "processed"),
+            }
+            configs.append(config)
+
+    model_calls = []
+
+    def model_factory(model_config):
+        model_calls.append(model_config.model_type)
+        return LightGBMModel(**model_config.hyperparameters)
+
+    experiment_id = run_graph_transfer_experiment(
+        configs,
+        train_graph="source_graph",
+        test_graph="unseen_graph",
+        model_factory=model_factory,
+        model_serializer=lambda model: model._estimator.booster_.model_to_string(),
+    )
+    experiment_root = root / "runs" / experiment_id
+    assert model_calls == ["lightgbm"]
+    with ExperimentDatabase(root / "experiments.sqlite3") as database:
+        assert database.get_experiment(experiment_id).status == "COMPLETED"
+        assert len(database.get_experiment_sample_requests(experiment_id)) == 4
+        assert len(database.get_experiment_samples(experiment_id)) == 48
+        metrics = database.get_experiment_metrics(experiment_id)
+        assert {metric.split for metric in metrics} == {
+            "test_unseen_graph",
+            "test_unseen_graph:k3",
+            "test_unseen_graph:k4",
+        }
+        stages = database.get_experiment_stages(experiment_id)
+        assert all(stage.status == "completed" for stage in stages)
+        assert any(
+            stage.stage_name == "graph_transfer_model_training"
+            for stage in stages
+        )
+
+    transfer_config = json.loads(
+        (experiment_root / "config" / "transfer_config.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert transfer_config["train_graph"] == "source_graph"
+    assert transfer_config["test_graph"] == "unseen_graph"
+    split = json.loads(
+        (experiment_root / "datasets" / "split_metadata.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert split["train_size_distribution"] == {"3": 12, "4": 12}
+    assert split["test_size_distribution"] == {"3": 12, "4": 12}
+    assert set(split["train_sample_ids"]).isdisjoint(split["test_sample_ids"])
+    assert (experiment_root / "models" / "model.txt").is_file()
+    assert (experiment_root / "predictions" / "predictions.csv").is_file()

@@ -3,6 +3,7 @@ import pytest
 from src.dataset.dataset import Dataset
 from src.dataset.sample import Sample
 from src.dataset.splitter import (
+    split_dataset_by_ordered_groups,
     split_dataset_stratified_kfold,
     split_dataset_three_way,
 )
@@ -150,3 +151,37 @@ def test_stratified_kfold_rejects_stratum_smaller_than_fold_count():
             n_splits=5,
             random_state=42,
         )
+
+
+def test_ordered_group_split_trains_only_on_smaller_groups():
+    groups = [size for size in (10, 20, 30, 40, 50, 60) for _ in range(4)]
+    dataset = Dataset(
+        [
+            Sample(
+                graph_id="graph",
+                subgraph_id=index,
+                features={"value": float(index)},
+                target=float(index),
+            )
+            for index in range(len(groups))
+        ]
+    )
+    folds = split_dataset_by_ordered_groups(dataset, groups, n_splits=2)
+
+    assert len(folds) == 2
+    tested = []
+    for train, test in folds:
+        train_groups = {groups[index] for index in train.subgraph_ids}
+        test_groups = {groups[index] for index in test.subgraph_ids}
+        assert max(train_groups) < min(test_groups)
+        assert set(train.subgraph_ids).isdisjoint(test.subgraph_ids)
+        tested.extend(test.subgraph_ids)
+    assert len(tested) == len(set(tested))
+    assert {groups[index] for index in tested} == {30, 40, 50, 60}
+
+
+def test_ordered_group_split_rejects_uneven_spacing():
+    groups = [size for size in (10, 20, 40, 50) for _ in range(2)]
+    dataset = make_dataset(size=len(groups))
+    with pytest.raises(ValueError, match="equally spaced"):
+        split_dataset_by_ordered_groups(dataset, groups, n_splits=2)

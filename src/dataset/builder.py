@@ -130,6 +130,7 @@ class DatasetBuilder:
         self,
         graph_id: Any = None,
         *,
+        complete_graph: Graph | None = None,
         candidate_subgraphs: Collection[Graph] | None = None,
         sample_ids: Sequence[str] | None = None,
     ) -> list[Sample]:
@@ -155,7 +156,7 @@ class DatasetBuilder:
         Returns:
             list[Sample]: Dataset samples generated from the complete graph.
         """
-        complete_graph = self._graph_loader.load()
+        complete_graph = complete_graph or self._graph_loader.load()
 
         if graph_id is None:
             graph_id = self._graph_loader.instance_path.name

@@ -197,6 +197,29 @@ class DatasetSplitConfig:
                 raise TypeError("stratified_kfold n_splits must be an integer.")
             if n_splits < 2:
                 raise ValueError("stratified_kfold n_splits must be at least 2.")
+        elif self.strategy == "time_series_size":
+            if self.test_ratio is not None or self.validation_size is not None:
+                raise ValueError(
+                    "time_series_size requires test_ratio and validation_size "
+                    "to be None."
+                )
+            n_splits = self.parameters.get("n_splits", 5)
+            if isinstance(n_splits, bool) or not isinstance(n_splits, int):
+                raise TypeError("time_series_size n_splits must be an integer.")
+            if n_splits < 2:
+                raise ValueError("time_series_size n_splits must be at least 2.")
+        elif self.strategy == "graph_transfer":
+            if self.test_ratio is not None or self.validation_size is not None:
+                raise ValueError(
+                    "graph_transfer requires test_ratio and validation_size "
+                    "to be None."
+                )
+            train_graph = self.parameters.get("train_graph")
+            test_graph = self.parameters.get("test_graph")
+            _validate_non_empty_string(train_graph, "train_graph")
+            _validate_non_empty_string(test_graph, "test_graph")
+            if train_graph == test_graph:
+                raise ValueError("train_graph and test_graph must differ.")
         else:
             raise ValueError(f"Unknown split strategy: {self.strategy!r}.")
 

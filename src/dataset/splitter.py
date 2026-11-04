@@ -2,7 +2,11 @@
 
 from collections import Counter
 
-from sklearn.model_selection import StratifiedKFold, train_test_split
+from sklearn.model_selection import (
+    StratifiedKFold,
+    TimeSeriesSplit,
+    train_test_split,
+)
 
 from .dataset import Dataset
 
@@ -97,4 +101,60 @@ def split_dataset_stratified_kfold(
             metadata=dataset.metadata,
         )
         folds.append((train, test))
+    return folds
+
+
+def split_dataset_by_ordered_groups(
+    dataset: Dataset,
+    groups: list[int],
+    *,
+    n_splits: int = 5,
+) -> list[tuple[Dataset, Dataset]]:
+    """Use TimeSeriesSplit over ordered, equally spaced groups such as sizes."""
+    if len(groups) != dataset.num_samples:
+        raise ValueError("groups must contain one value per dataset sample.")
+    if isinstance(n_splits, bool) or not isinstance(n_splits, int):
+        raise TypeError("n_splits must be an integer.")
+    if n_splits < 2:
+        raise ValueError("n_splits must be at least 2.")
+
+    ordered_groups = sorted(set(groups))
+    if len(ordered_groups) <= n_splits:
+        raise ValueError("TimeSeriesSplit requires more groups than n_splits.")
+    if len(ordered_groups) < 2:
+        raise ValueError("At least two distinct groups are required.")
+    intervals = {
+        current - previous
+        for previous, current in zip(ordered_groups, ordered_groups[1:])
+    }
+    if len(intervals) != 1:
+        raise ValueError(
+            "Ordered groups must be equally spaced for comparable "
+            "TimeSeriesSplit folds."
+        )
+
+    group_splitter = TimeSeriesSplit(n_splits=n_splits)
+    samples = dataset.samples
+    indices_by_group = {
+        group: [index for index, value in enumerate(groups) if value == group]
+        for group in ordered_groups
+    }
+    folds = []
+    for train_group_indices, test_group_indices in group_splitter.split(
+        ordered_groups
+    ):
+        train_groups = [ordered_groups[index] for index in train_group_indices]
+        test_groups = [ordered_groups[index] for index in test_group_indices]
+        train_indices = [
+            index for group in train_groups for index in indices_by_group[group]
+        ]
+        test_indices = [
+            index for group in test_groups for index in indices_by_group[group]
+        ]
+        folds.append(
+            (
+                Dataset([samples[index] for index in train_indices], dataset.metadata),
+                Dataset([samples[index] for index in test_indices], dataset.metadata),
+            )
+        )
     return folds

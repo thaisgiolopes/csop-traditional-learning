@@ -44,6 +44,7 @@ class DatasetPipeline:
         graph_id: Any = None,
         output_path: Path | str | None = None,
         *,
+        complete_graph: Graph | None = None,
         candidate_subgraphs: Collection[Graph] | None = None,
         sample_ids: Sequence[str] | None = None,
         experiment_metadata: Mapping[str, Any] | None = None,
@@ -77,6 +78,7 @@ class DatasetPipeline:
         with stage_context_factory("feature_extraction_and_targets"):
             samples = self._dataset_builder.build(
                 graph_id=graph_id,
+                complete_graph=complete_graph,
                 candidate_subgraphs=candidate_subgraphs,
                 sample_ids=sample_ids,
             )
