@@ -1,0 +1,17 @@
+.git
+.venv
+venv
+env
+__pycache__
+*.py[cod]
+.pytest_cache
+.coverage
+htmlcov
+data/raw
+data/processed
+*.sqlite3
+*.db
+*.log
+experiments/runs
+experiments/reports
+experiments/processed
