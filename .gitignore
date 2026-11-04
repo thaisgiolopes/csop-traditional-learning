@@ -30,6 +30,7 @@ dist/
 
 # Dados gerados
 data/processed/
+data/raw/
 
 # Modelos treinados
 models/
