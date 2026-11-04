@@ -13,7 +13,7 @@
         "degree_min",
         "degree_std"
       ],
-      "feature_set_id": "graph-size-local-degree-and-subgraph-size-v2",
+      "feature_set_id": "graph-size-node-structure-local-with-subgraph-size-v1",
       "objective_name": "tds",
       "target_sizes": [
         10,

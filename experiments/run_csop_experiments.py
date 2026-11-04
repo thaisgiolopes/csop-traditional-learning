@@ -16,7 +16,6 @@ The ``--all`` option is required to execute the full graph-by-size batch.
 
 import argparse
 from collections.abc import Sequence
-from math import ceil
 from pathlib import Path
 import sys
 
@@ -26,6 +25,7 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 from src.application.csop_experiment_runner import run_experiment_batch
 from src.experiments.csop_presets import (
+    AVAILABLE_NODE_FEATURES,
     SUPPORTED_DATASETS,
     SUPPORTED_SUBGRAPH_SIZES,
     build_csop_configs,
@@ -77,6 +77,37 @@ def _add_run_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--num-leaves", type=int, default=31)
     parser.add_argument("--min-child-samples", type=int, default=20)
     parser.add_argument("--model-jobs", type=int, default=1)
+    parser.add_argument(
+        "--folds",
+        type=int,
+        default=5,
+        help="Number of stratified folds used for evaluation (default: 5).",
+    )
+    feature_group = parser.add_mutually_exclusive_group()
+    feature_group.add_argument(
+        "--node-feature",
+        dest="node_features",
+        action="append",
+        choices=AVAILABLE_NODE_FEATURES,
+        help=(
+            "Add a node feature; repeat to select a subset. Defaults to "
+            "degree when no feature option is given."
+        ),
+    )
+    feature_group.add_argument(
+        "--no-node-features",
+        action="store_true",
+        help="Use only graph-size and candidate-size features.",
+    )
+    parser.add_argument(
+        "--node-scope",
+        choices=("local", "global"),
+        default="local",
+        help=(
+            "Compute selected node features on each candidate (local) or "
+            "once on the full graph (global)."
+        ),
+    )
 
 
 def _output_paths(root: Path) -> dict[str, str]:
@@ -157,13 +188,22 @@ def _build_configs(
     max_attempts: int,
     output_root: Path,
     model_parameters: dict[str, int | float],
+    node_features: Sequence[str] = ("degree",),
+    node_scope: str = "local",
+    folds: int = 5,
 ) -> list[ExperimentConfig]:
     if not 0 <= seed <= 2**32 - 1:
         raise ValueError("--seed must be between 0 and 4294967295.")
-    if samples < 10:
+    if samples < 2:
         raise ValueError(
-            "--samples must be at least 10 so train, validation, and test "
-            "splits each contain at least two samples for regression metrics."
+            "--samples must be at least 2 for regression evaluation."
+        )
+    if folds < 2:
+        raise ValueError("--folds must be at least 2.")
+    if samples < folds:
+        raise ValueError(
+            "--samples must be at least --folds so every size is represented "
+            "in each stratified test fold."
         )
     if max_attempts <= 0:
         raise ValueError("--max-attempts must be positive.")
@@ -174,6 +214,9 @@ def _build_configs(
         seed=seed,
         max_attempts=max_attempts,
         model_hyperparameters=model_parameters,
+        node_features=node_features,
+        node_scope=node_scope,
+        n_splits=folds,
         output_paths=_output_paths(output_root),
     )
 
@@ -202,16 +245,11 @@ def _validate_config(config: ExperimentConfig) -> tuple[int, int]:
         )
 
     sample_count = config.subgraph_generation.sample_count
-    test_count = ceil(sample_count * config.dataset_split.test_ratio)
-    development_count = sample_count - test_count
-    validation_count = ceil(
-        development_count * config.dataset_split.validation_size
-    )
-    training_count = development_count - validation_count
-    if min(training_count, validation_count, test_count) < 2:
+    folds = config.dataset_split.parameters.get("n_splits", 5)
+    if sample_count < folds:
         raise ValueError(
-            "The configured sample count must produce at least two samples "
-            "in each train, validation, and test split."
+            f"{config.graph.source} k={target_size}: samples ({sample_count}) "
+            f"must be at least folds ({folds})."
         )
     return vertex_count, edge_count
 
@@ -223,7 +261,10 @@ def _describe(config: ExperimentConfig, vertex_count: int, edge_count: int) -> s
         f"k={config.subgraph_generation.parameters['subgraph_size']}, "
         f"samples={config.subgraph_generation.sample_count}, "
         f"seed={config.random_seed}, model={config.model.model_type}"
-        f"{config.model.hyperparameters}"
+        f"{config.model.hyperparameters}, "
+        f"split={config.dataset_split.strategy}"
+        f"({config.dataset_split.parameters}), "
+        f"features={config.features.feature_names}"
     )
 
 
@@ -304,6 +345,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 )
 
         model_parameters = _model_parameters(args)
+        node_features = (
+            []
+            if args.no_node_features
+            else args.node_features or ["degree"]
+        )
         configs = _build_configs(
             graphs=graphs,
             sizes=sizes,
@@ -312,6 +358,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             max_attempts=args.max_attempts,
             output_root=output_root,
             model_parameters=model_parameters,
+            node_features=node_features,
+            node_scope=args.node_scope,
+            folds=args.folds,
         )
 
         validated = []

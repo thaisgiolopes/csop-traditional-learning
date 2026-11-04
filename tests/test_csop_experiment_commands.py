@@ -1,5 +1,6 @@
 from experiments import run_csop_experiments
 from src.experiments.csop_presets import build_csop_configs
+from src.application.csop_experiment_runner import _build_feature_set
 
 
 def test_presets_expose_selected_factors_and_isolated_output_paths(tmp_path):
@@ -29,7 +30,7 @@ def test_presets_expose_selected_factors_and_isolated_output_paths(tmp_path):
     for config in configs:
         assert (
             config.features.feature_set_id
-            == "graph-size-local-degree-and-subgraph-size-v2"
+            == "graph-size-node-structure-local-with-subgraph-size-v1"
         )
         assert "subgraph_size" in config.features.feature_names
         assert config.subgraph_generation.sample_count == 20
@@ -40,6 +41,42 @@ def test_presets_expose_selected_factors_and_isolated_output_paths(tmp_path):
         assert config.model.hyperparameters["n_estimators"] == 12
         assert config.model.hyperparameters["num_leaves"] == 7
         assert config.output == output_paths
+
+
+def test_global_feature_preset_matches_runner_column_order():
+    config = build_csop_configs(
+        datasets=["citeseer"],
+        subgraph_sizes=[10],
+        node_features=[
+            "degree",
+            "pagerank",
+            "k_core_number",
+            "average_neighbor_degree",
+        ],
+        node_scope="global",
+    )[0]
+
+    assert config.features.feature_names == [
+        "num_vertices",
+        "num_edges",
+        "degree_mean",
+        "degree_max",
+        "degree_min",
+        "degree_std",
+        "pagerank_global_mean",
+        "pagerank_global_max",
+        "pagerank_global_min",
+        "pagerank_global_std",
+        "k_core_number_global_mean",
+        "k_core_number_global_max",
+        "k_core_number_global_min",
+        "k_core_number_global_std",
+        "average_neighbor_degree_global_mean",
+        "average_neighbor_degree_global_max",
+        "average_neighbor_degree_global_min",
+        "average_neighbor_degree_global_std",
+        "subgraph_size",
+    ]
 
 
 def test_list_and_validate_commands_do_not_execute_or_create_outputs(
@@ -112,6 +149,83 @@ def test_run_requires_explicit_single_selection_or_all(monkeypatch):
     assert len(called) == 1
     assert called[0].graph.source == "citeseer"
     assert called[0].subgraph_generation.parameters["subgraph_size"] == 20
+
+
+def test_cli_selects_a_subset_of_local_node_features(monkeypatch):
+    captured = []
+    monkeypatch.setattr(
+        run_csop_experiments,
+        "_run_configs",
+        lambda configs: captured.extend(configs) or 0,
+    )
+
+    assert run_csop_experiments.main(
+        [
+            "run",
+            "--graph", "citeseer",
+            "--size", "10",
+            "--size", "20",
+            "--samples", "100",
+            "--node-feature", "pagerank",
+            "--node-feature", "triangle_count",
+            "--node-scope", "local",
+        ]
+    ) == 0
+    assert len(captured) == 2
+    for config in captured:
+        assert config.features.enabled_features == [
+            "pagerank", "triangle_count"
+        ]
+        assert "pagerank_local_mean" in config.features.feature_names
+        assert "triangle_count_local_std" in config.features.feature_names
+
+
+def test_cli_can_use_global_node_features_or_disable_them(monkeypatch):
+    captured = []
+    monkeypatch.setattr(
+        run_csop_experiments,
+        "_run_configs",
+        lambda configs: captured.extend(configs) or 0,
+    )
+    run_csop_experiments.main(
+        [
+            "run", "--graph", "citeseer", "--size", "10", "--samples", "20",
+            "--node-feature", "pagerank", "--node-scope", "global",
+        ]
+    )
+    assert captured[0].features.enabled_features == ["pagerank"]
+    assert "pagerank_global_mean" in captured[0].features.feature_names
+
+    captured.clear()
+    run_csop_experiments.main(
+        [
+            "run", "--graph", "citeseer", "--size", "10", "--samples", "20",
+            "--no-node-features",
+        ]
+    )
+    assert captured[0].features.enabled_features == []
+    assert captured[0].features.feature_names == [
+        "num_vertices", "num_edges", "subgraph_size"
+    ]
+
+
+def test_selected_node_features_match_runner_output_schema():
+    engine, pooling = _build_feature_set(
+        "graph-size-node-structure-local-with-subgraph-size-v1",
+        enabled_features=["pagerank", "triangle_count"],
+    )
+    generated_names = [feature.name for feature in engine.features[:3]]
+    generated_names.extend(
+        f"{feature.name}_{strategy.name}"
+        for feature in engine.features[3:]
+        for strategy in pooling[feature.name]
+    )
+    config = build_csop_configs(
+        datasets=["citeseer"],
+        subgraph_sizes=[10],
+        node_features=["pagerank", "triangle_count"],
+    )[0]
+    assert config.features.feature_names == generated_names
 
 
 def test_list_all_expands_full_configured_batch(monkeypatch, capsys):

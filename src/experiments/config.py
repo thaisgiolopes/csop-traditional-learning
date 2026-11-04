@@ -165,29 +165,40 @@ class FeatureConfig:
 
 @dataclass
 class DatasetSplitConfig:
-    """Configures the final test and development train/validation splits.
-
-    validation_size is a fraction of the development data, after removing
-    the final test set.
-    """
+    """Configure a holdout split or stratified K-fold cross-validation."""
 
     strategy: str
-    test_ratio: float
-    validation_size: float
+    test_ratio: float | None
+    validation_size: float | None
     random_state: int | None = None
     parameters: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         _validate_non_empty_string(self.strategy, "strategy")
+        _validate_parameters(self.parameters, "dataset split parameters")
 
-        for field_name in ("test_ratio", "validation_size"):
-            ratio = getattr(self, field_name)
-            if isinstance(ratio, bool) or not isinstance(ratio, (int, float)):
-                raise TypeError(f"{field_name} must be numeric.")
-            if not math.isfinite(ratio) or not 0 < ratio < 1:
+        if self.strategy == "random":
+            for field_name in ("test_ratio", "validation_size"):
+                ratio = getattr(self, field_name)
+                if isinstance(ratio, bool) or not isinstance(ratio, (int, float)):
+                    raise TypeError(f"{field_name} must be numeric for random splitting.")
+                if not math.isfinite(ratio) or not 0 < ratio < 1:
+                    raise ValueError(
+                        f"{field_name} must be greater than 0 and less than 1."
+                    )
+        elif self.strategy == "stratified_kfold":
+            if self.test_ratio is not None or self.validation_size is not None:
                 raise ValueError(
-                    f"{field_name} must be greater than 0 and less than 1."
+                    "stratified_kfold requires test_ratio and validation_size "
+                    "to be None."
                 )
+            n_splits = self.parameters.get("n_splits", 5)
+            if isinstance(n_splits, bool) or not isinstance(n_splits, int):
+                raise TypeError("stratified_kfold n_splits must be an integer.")
+            if n_splits < 2:
+                raise ValueError("stratified_kfold n_splits must be at least 2.")
+        else:
+            raise ValueError(f"Unknown split strategy: {self.strategy!r}.")
 
         if self.random_state is not None and (
             isinstance(self.random_state, bool)
@@ -195,7 +206,6 @@ class DatasetSplitConfig:
         ):
             raise TypeError("random_state must be an integer or None.")
 
-        _validate_parameters(self.parameters, "dataset split parameters")
 
 
 @dataclass

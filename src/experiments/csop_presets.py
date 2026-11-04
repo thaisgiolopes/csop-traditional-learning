@@ -15,15 +15,51 @@ from .config import (
 SUPPORTED_DATASETS = ("amazon", "citeseer")
 SUPPORTED_SUBGRAPH_SIZES = tuple(range(10, 501, 10))
 
-FEATURE_NAMES = [
+BASE_FEATURE_NAMES = [
     "num_vertices",
     "num_edges",
     "subgraph_size",
-    "degree_mean",
-    "degree_max",
-    "degree_min",
-    "degree_std",
 ]
+POOLING_NAMES = ("mean", "max", "min", "std")
+AVAILABLE_NODE_FEATURES = (
+    "degree",
+    "pagerank",
+    "betweenness_centrality",
+    "closeness_centrality",
+    "eigenvector_centrality",
+    "k_core_number",
+    "triangle_count",
+    "local_clustering_coefficient",
+    "square_clustering",
+    "average_neighbor_degree",
+    "normalized_degree",
+)
+
+
+def configured_feature_names(
+    node_features: Iterable[str], node_scope: str
+) -> list[str]:
+    """List the exact ordered feature columns produced by the runner."""
+    if node_scope not in {"local", "global"}:
+        raise ValueError("node_scope must be 'local' or 'global'.")
+    selected = list(node_features)
+    unknown = set(selected) - set(AVAILABLE_NODE_FEATURES)
+    if unknown:
+        raise ValueError(f"Unknown node features: {sorted(unknown)!r}.")
+    if len(selected) != len(set(selected)):
+        raise ValueError("Node features must not contain duplicates.")
+    pooled_names = [
+        f"{feature}_{pooling}"
+        if feature == "degree"
+        else f"{feature}_{node_scope}_{pooling}"
+        for feature in selected
+        for pooling in POOLING_NAMES
+    ]
+    if node_scope == "global":
+        # Global node mappings are emitted with global graph features; the
+        # candidate-local size feature is merged after those mappings.
+        return ["num_vertices", "num_edges", *pooled_names, "subgraph_size"]
+    return [*BASE_FEATURE_NAMES, *pooled_names]
 
 
 def build_csop_configs(
@@ -34,11 +70,16 @@ def build_csop_configs(
     seed: int = 42,
     max_attempts: int = 5_000,
     model_hyperparameters: Mapping[str, object] | None = None,
+    node_features: Iterable[str] = ("degree",),
+    node_scope: str = "local",
+    n_splits: int = 5,
     output_paths: Mapping[str, str] | None = None,
 ) -> list[ExperimentConfig]:
     """Build one reproducible TDS experiment config per dataset and size."""
     dataset_names = list(datasets)
     sizes = list(subgraph_sizes)
+    selected_features = list(node_features)
+    feature_names = configured_feature_names(selected_features, node_scope)
 
     if not dataset_names:
         raise ValueError("At least one dataset must be selected.")
@@ -121,17 +162,19 @@ def build_csop_configs(
                     ),
                     features=FeatureConfig(
                         feature_set_id=(
-                            "graph-size-local-degree-and-subgraph-size-v2"
+                            "graph-size-node-structure-"
+                            f"{node_scope}-with-subgraph-size-v1"
                         ),
-                        feature_names=FEATURE_NAMES.copy(),
-                        enabled_features=["degree"],
+                        feature_names=feature_names.copy(),
+                        enabled_features=selected_features.copy(),
                         objective_name="tds",
                     ),
                     dataset_split=DatasetSplitConfig(
-                        strategy="random",
-                        test_ratio=0.2,
-                        validation_size=0.25,
+                        strategy="stratified_kfold",
+                        test_ratio=None,
+                        validation_size=None,
                         random_state=seed,
+                        parameters={"n_splits": n_splits},
                     ),
                     model=ModelConfig(
                         model_type="lightgbm",

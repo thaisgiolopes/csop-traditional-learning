@@ -2,7 +2,10 @@ import pytest
 
 from src.dataset.dataset import Dataset
 from src.dataset.sample import Sample
-from src.dataset.splitter import split_dataset_three_way
+from src.dataset.splitter import (
+    split_dataset_stratified_kfold,
+    split_dataset_three_way,
+)
 
 
 def make_dataset(size: int = 50) -> Dataset:
@@ -98,4 +101,52 @@ def test_invalid_split_sizes_are_rejected():
             test_size=0.5,
             validation_size=0.5,
             random_state=1,
+        )
+
+
+def test_stratified_kfold_is_reproducible_disjoint_and_balances_strata():
+    dataset = Dataset(
+        [
+            Sample(
+                graph_id="graph",
+                subgraph_id=index,
+                features={"value": float(index)},
+                target=float(index),
+                sample_id=f"sample-{index}",
+            )
+            for index in range(30)
+        ]
+    )
+    strata = [10] * 15 + [20] * 15
+
+    first = split_dataset_stratified_kfold(
+        dataset, strata, n_splits=5, random_state=42
+    )
+    second = split_dataset_stratified_kfold(
+        dataset, strata, n_splits=5, random_state=42
+    )
+
+    assert len(first) == 5
+    test_partitions = []
+    for (train, test), (repeat_train, repeat_test) in zip(
+        first, second, strict=True
+    ):
+        assert set(train.subgraph_ids).isdisjoint(test.subgraph_ids)
+        assert train.subgraph_ids == repeat_train.subgraph_ids
+        assert test.subgraph_ids == repeat_test.subgraph_ids
+        test_strata = [strata[index] for index in test.subgraph_ids]
+        assert test_strata.count(10) == 3
+        assert test_strata.count(20) == 3
+        test_partitions.extend(test.subgraph_ids)
+    assert sorted(test_partitions) == list(range(30))
+
+
+def test_stratified_kfold_rejects_stratum_smaller_than_fold_count():
+    dataset = make_dataset(size=10)
+    with pytest.raises(ValueError, match="Each stratum"):
+        split_dataset_stratified_kfold(
+            dataset,
+            [10] * 4 + [20] * 6,
+            n_splits=5,
+            random_state=42,
         )

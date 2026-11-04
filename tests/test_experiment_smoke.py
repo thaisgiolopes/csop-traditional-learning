@@ -275,13 +275,29 @@ def test_grouped_sizes_train_one_shared_model_and_persist_size_metrics(tmp_path)
         config.graph.graph_id = f"smoke_k{size}"
         config.subgraph_generation.parameters["subgraph_size"] = size
         config.features.feature_set_id = (
-            "graph-size-local-degree-and-subgraph-size-v2"
+            "graph-size-node-structure-global-with-subgraph-size-v1"
         )
         config.features.feature_names = [
-            *FEATURE_NAMES[:2],
+            "num_vertices",
+            "num_edges",
+            "degree_mean",
+            "degree_max",
+            "degree_min",
+            "degree_std",
+            "pagerank_global_mean",
+            "pagerank_global_max",
+            "pagerank_global_min",
+            "pagerank_global_std",
             "subgraph_size",
-            *FEATURE_NAMES[2:],
         ]
+        config.features.enabled_features = ["degree", "pagerank"]
+        config.dataset_split = DatasetSplitConfig(
+            strategy="stratified_kfold",
+            test_ratio=None,
+            validation_size=None,
+            random_state=SEED,
+            parameters={"n_splits": 4},
+        )
         config.output = {
             "experiments_root": str(root / "runs"),
             "database_path": str(root / "experiments.sqlite3"),
@@ -312,22 +328,27 @@ def test_grouped_sizes_train_one_shared_model_and_persist_size_metrics(tmp_path)
         assert len(database.get_experiment_samples(experiment_id)) == 2 * SAMPLE_COUNT
 
         metrics = database.get_experiment_metrics(experiment_id)
-        assert len(metrics) >= 13
-        assert {metric.split for metric in metrics} >= {
-            "train", "validation", "test", "test:k3", "test:k4"
+        assert len(metrics) == 18
+        assert {metric.split for metric in metrics} == {
+            *(f"fold_{fold}" for fold in range(1, 5)),
+            "cv_mean", "cv_std",
         }
         stages = database.get_experiment_stages(experiment_id)
         assert all(stage.status == "completed" for stage in stages)
-        assert sum(stage.stage_name == "model_training" for stage in stages) == 1
+        assert sum(
+            stage.stage_name.startswith("fold_")
+            and stage.stage_name.endswith("_model_training")
+            for stage in stages
+        ) == 4
         assert any(
-            stage.stage_name == "test_evaluation_k3_shared_model"
+            stage.stage_name == "fold_1_evaluation"
             for stage in stages
         )
         assert any(
-            stage.stage_name == "test_evaluation_k4_shared_model"
+            stage.stage_name == "final_model_training_on_all_samples"
             for stage in stages
         )
-    assert model_factory_calls == ["lightgbm"]
+    assert model_factory_calls == ["lightgbm"] * 5
 
     batch_config = json.loads(
         (experiment_root / "config" / "batch_config.json").read_text(
@@ -354,14 +375,38 @@ def test_grouped_sizes_train_one_shared_model_and_persist_size_metrics(tmp_path)
     assert sum(
         int(row["subgraph_size"]) == 3 for row in combined_rows
     ) == SAMPLE_COUNT
-    train_rows = list(
-        csv.DictReader(
-            (experiment_root / "datasets" / "train_dataset.csv").open(
-                newline="", encoding="utf-8"
-            )
+    split_metadata = json.loads(
+        (experiment_root / "datasets" / "split_metadata.json").read_text(
+            encoding="utf-8"
         )
     )
-    assert len(train_rows) + 10 + 10 == 2 * SAMPLE_COUNT
+    assert split_metadata["strategy"] == "stratified_kfold"
+    assert len(split_metadata["folds"]) == 4
+    for fold in split_metadata["folds"]:
+        assert fold["train_sample_count"] + fold["test_sample_count"] == (
+            2 * SAMPLE_COUNT
+        )
+        assert set(fold["train_size_distribution"]) == {"3", "4"}
+        assert set(fold["test_size_distribution"]) == {"3", "4"}
+        assert sum(fold["test_size_distribution"].values()) == (
+            fold["test_sample_count"]
+        )
+    metrics_json = json.loads(
+        (experiment_root / "evaluation" / "metrics.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert metrics_json["evaluation_method"] == "stratified_kfold"
+    assert len(metrics_json["folds"]) == 4
+    expected_mean_r2 = sum(
+        fold["metrics"]["r2"] for fold in metrics_json["folds"]
+    ) / 4
+    assert metrics_json["mean"]["r2"] == pytest.approx(expected_mean_r2)
+    with (experiment_root / "predictions" / "predictions.csv").open(
+        newline="", encoding="utf-8"
+    ) as handle:
+        out_of_fold_predictions = list(csv.DictReader(handle))
+    assert len(out_of_fold_predictions) == 2 * SAMPLE_COUNT
     assert (experiment_root / "models" / "model.txt").is_file()
     assert (experiment_root / "predictions" / "predictions.csv").is_file()
     report_path = root / "reports" / "experiments.xlsx"

@@ -8,6 +8,7 @@ from io import StringIO
 import json
 import math
 from pathlib import Path
+from statistics import fmean, pstdev
 import traceback
 from typing import Any
 
@@ -16,7 +17,10 @@ import networkx as nx
 from src.dataset.builder import DatasetBuilder
 from src.dataset.dataset import Dataset
 from src.dataset.loader import DatasetLoader
-from src.dataset.splitter import split_dataset_three_way
+from src.dataset.splitter import (
+    split_dataset_stratified_kfold,
+    split_dataset_three_way,
+)
 from src.evaluation.evaluator import Evaluator
 from src.evaluation.result import EvaluationResult
 from src.experiments.report import ExperimentReport
@@ -113,6 +117,16 @@ def _build_feature_set(
         "graph-size-and-node-structure-local-v1": FeatureScope.LOCAL,
         "graph-size-and-node-structure-global-v1": FeatureScope.GLOBAL,
     }
+    include_candidate_size = "-with-subgraph-size-v1" in feature_set_id
+    if include_candidate_size:
+        scope_key = feature_set_id.removeprefix(
+            "graph-size-node-structure-"
+        ).removesuffix("-with-subgraph-size-v1")
+        if scope_key not in {"local", "global"}:
+            raise ValueError(f"Unknown feature set: {feature_set_id!r}")
+        node_feature_scopes[feature_set_id] = (
+            FeatureScope.LOCAL if scope_key == "local" else FeatureScope.GLOBAL
+        )
     if feature_set_id in node_feature_scopes:
         scope = node_feature_scopes[feature_set_id]
         available_node_features = [
@@ -127,30 +141,29 @@ def _build_feature_set(
             AverageNeighborDegreeFeature(scope=scope),
             NormalizedDegreeFeature(scope=scope),
         ]
-        available_feature_ids = {
-            feature.name.removesuffix("_local").removesuffix("_global")
+        feature_by_id = {
+            feature.name.removesuffix("_local").removesuffix("_global"): feature
             for feature in available_node_features
         }
+        if include_candidate_size:
+            feature_by_id["degree"] = DegreeFeature(scope=scope)
+        available_feature_ids = set(feature_by_id)
         requested_feature_ids = (
-            available_feature_ids
+            list(feature_by_id)
             if enabled_features is None
-            else set(enabled_features)
+            else list(enabled_features)
         )
-        unknown_features = requested_feature_ids - available_feature_ids
+        unknown_features = set(requested_feature_ids) - available_feature_ids
         if unknown_features:
             raise ValueError(
                 "Unknown enabled features for this feature set: "
                 f"{sorted(unknown_features)!r}."
             )
-        node_features = [
-            feature
-            for feature in available_node_features
-            if feature.name.removesuffix("_local").removesuffix("_global")
-            in requested_feature_ids
-        ]
-        feature_engine = FeatureEngine(
-            features=[NumVerticesFeature(), NumEdgesFeature(), *node_features]
-        )
+        node_features = [feature_by_id[name] for name in requested_feature_ids]
+        graph_features = [NumVerticesFeature(), NumEdgesFeature()]
+        if include_candidate_size:
+            graph_features.append(SubgraphSizeFeature())
+        feature_engine = FeatureEngine(features=[*graph_features, *node_features])
         pooling_strategies = {
             feature.name: (
                 MeanPooling(),
@@ -426,6 +439,207 @@ def _save_json(
     experiment.register_artifact(category, filename, "application/json")
     return path
 
+
+def _size_distribution(
+    dataset: Dataset,
+    sample_sizes: dict[str, int],
+) -> dict[str, int]:
+    """Count candidate subgraph sizes in a dataset partition."""
+    counts: dict[str, int] = {}
+    for sample in dataset.samples:
+        if sample.sample_id not in sample_sizes:
+            raise ValueError(
+                f"Missing target-size metadata for sample {sample.sample_id!r}."
+            )
+        key = str(sample_sizes[sample.sample_id])
+        counts[key] = counts.get(key, 0) + 1
+    return dict(sorted(counts.items(), key=lambda item: int(item[0])))
+
+
+def _run_stratified_kfold(
+    *,
+    experiment: ExperimentManager,
+    config: ExperimentConfig,
+    dataset: Dataset,
+    sample_sizes: dict[str, int],
+    model_factory: ModelFactory,
+    model_serializer: ModelSerializer | None,
+    artifact_name: Callable[[str], str],
+    track_stage: Callable[[str], Any],
+) -> None:
+    """Evaluate by stratified folds, then persist a final all-data model."""
+    n_splits = config.dataset_split.parameters.get("n_splits", 5)
+    strata = [sample_sizes[sample.sample_id] for sample in dataset.samples]
+    folds = split_dataset_stratified_kfold(
+        dataset,
+        strata,
+        n_splits=n_splits,
+        random_state=config.dataset_split.random_state,
+    )
+    fold_records = []
+    out_of_fold_predictions: list[PredictionResult] = []
+    test_seen: list[str] = []
+
+    with track_stage("split_characterization"):
+        split_metadata = {
+            "strategy": "stratified_kfold",
+            "stratification_key": "subgraph_size",
+            "n_splits": n_splits,
+            "random_state": config.dataset_split.random_state,
+            "total_sample_count": dataset.num_samples,
+            "total_size_distribution": _size_distribution(dataset, sample_sizes),
+            "folds": [],
+        }
+        for fold_index, (train_dataset, test_dataset) in enumerate(folds, start=1):
+            train_ids = set(train_dataset.subgraph_ids)
+            test_ids = set(test_dataset.subgraph_ids)
+            if train_ids & test_ids:
+                raise RuntimeError(f"Fold {fold_index} train/test overlap.")
+            test_seen.extend(str(sample_id) for sample_id in test_dataset.subgraph_ids)
+            split_metadata["folds"].append(
+                {
+                    "fold": fold_index,
+                    "train_sample_count": train_dataset.num_samples,
+                    "test_sample_count": test_dataset.num_samples,
+                    "train_size_distribution": _size_distribution(
+                        train_dataset, sample_sizes
+                    ),
+                    "test_size_distribution": _size_distribution(
+                        test_dataset, sample_sizes
+                    ),
+                }
+            )
+        expected_ids = [str(sample_id) for sample_id in dataset.subgraph_ids]
+        if sorted(test_seen) != sorted(expected_ids):
+            raise RuntimeError(
+                "K-fold test partitions do not cover every sample exactly once."
+            )
+        _save_json(
+            experiment,
+            "datasets",
+            artifact_name("split_metadata.json"),
+            split_metadata,
+        )
+
+    for fold_index, (train_dataset, test_dataset) in enumerate(folds, start=1):
+        with track_stage(f"fold_{fold_index}_model_training"):
+            fold_model = model_factory(config.model)
+            fold_model = TrainingPipeline(
+                dataset=train_dataset,
+                model=fold_model,
+            ).run()
+
+        with track_stage(f"fold_{fold_index}_evaluation") as stage:
+            result = PredictionPipeline(
+                model=fold_model,
+                dataset=test_dataset,
+                predictor=Predictor(fold_model),
+                evaluator=Evaluator(),
+            ).run()
+            values = _metric_values(result.evaluation)
+            out_of_fold_predictions.extend(result.predictions)
+            record = {
+                "fold": fold_index,
+                "num_train_samples": train_dataset.num_samples,
+                "num_test_samples": test_dataset.num_samples,
+                "metrics": values,
+            }
+            fold_records.append(record)
+        for metric_name, metric_value in values.items():
+            if metric_value is not None:
+                experiment.register_metric(
+                    metric_name,
+                    metric_value,
+                    stage_id=stage.stage_id,
+                    split=f"fold_{fold_index}",
+                )
+
+    metric_names = ("mae", "rmse", "r2")
+    values_by_metric = {
+        metric: [
+            record["metrics"][metric]
+            for record in fold_records
+            if record["metrics"][metric] is not None
+        ]
+        for metric in metric_names
+    }
+    means = {
+        metric: fmean(values) if values else None
+        for metric, values in values_by_metric.items()
+    }
+    deviations = {
+        metric: pstdev(values) if values else None
+        for metric, values in values_by_metric.items()
+    }
+    with track_stage("cross_validation_metric_aggregation") as aggregate_stage:
+        for metric_name in metric_names:
+            if means[metric_name] is not None:
+                experiment.register_metric(
+                    metric_name,
+                    means[metric_name],
+                    stage_id=aggregate_stage.stage_id,
+                    split="cv_mean",
+                )
+                experiment.register_metric(
+                    metric_name,
+                    deviations[metric_name],
+                    stage_id=aggregate_stage.stage_id,
+                    split="cv_std",
+                )
+
+    # Persist a deployable model refit on all observations after unbiased
+    # out-of-fold evaluation is complete.
+    with track_stage("final_model_training_on_all_samples"):
+        final_model = model_factory(config.model)
+        final_model = TrainingPipeline(dataset=dataset, model=final_model).run()
+        if model_serializer is not None:
+            model_text = model_serializer(final_model)
+            experiment.artifact_store.save_text(
+                "models", artifact_name("model.txt"), model_text
+            )
+            experiment.register_artifact(
+                "models", artifact_name("model.txt"), "text/plain"
+            )
+
+    with track_stage("result_artifact_persistence"):
+        predictions_path = experiment.artifact_store.save_text(
+            "predictions",
+            artifact_name("predictions.csv"),
+            _predictions_to_csv(out_of_fold_predictions),
+        )
+        experiment.register_artifact(
+            "predictions", artifact_name("predictions.csv"), "text/csv"
+        )
+        _save_json(
+            experiment,
+            "evaluation",
+            artifact_name("metrics.json"),
+            {
+                "evaluation_method": "stratified_kfold",
+                "n_splits": n_splits,
+                "folds": fold_records,
+                "mean": means,
+                "std": deviations,
+                "final_model": "refit_on_all_samples_after_cross_validation",
+            },
+        )
+        for prediction in out_of_fold_predictions:
+            actual = prediction.true_target
+            error = (
+                prediction.predicted_target - actual
+                if actual is not None
+                else None
+            )
+            experiment.register_prediction(
+                sample_id=(
+                    prediction.sample_id
+                    or f"{prediction.graph_id}:{prediction.subgraph_id}"
+                ),
+                predicted_value=prediction.predicted_target,
+                actual_value=actual,
+                prediction_error=error,
+            )
+
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 _GRAPH_SOURCES = {
     "amazon": _REPOSITORY_ROOT / "data" / "raw" / "amazon",
@@ -537,7 +751,7 @@ def run_experiment(
             f"Unsupported objective: {config.features.objective_name!r}"
         )
 
-    if config.dataset_split.strategy != "random":
+    if config.dataset_split.strategy not in {"random", "stratified_kfold"}:
         raise ValueError(
             f"Unknown dataset split strategy: {config.dataset_split.strategy!r}"
         )
@@ -547,8 +761,6 @@ def run_experiment(
         config.features.enabled_features,
     )
     subgraph_generator = _build_generator(config.subgraph_generation)
-
-    model = model_factory(config.model)
 
     effective_config = ExperimentConfig(
         graph=config.graph,
@@ -700,7 +912,12 @@ def run_experiment(
                     size_sample_ids = [record.sample_id for record in records]
                     sample_ids.extend(size_sample_ids)
                     sample_sizes.update(
-                        {sample_id: size for sample_id in size_sample_ids}
+                        {
+                            sample_id: candidate.num_vertices
+                            for sample_id, candidate in zip(
+                                size_sample_ids, size_candidates, strict=True
+                            )
+                        }
                     )
 
                     with track_stage(
@@ -838,6 +1055,19 @@ def run_experiment(
                         "application/json",
                     )
 
+                if split_config.strategy == "stratified_kfold":
+                    _run_stratified_kfold(
+                        experiment=experiment,
+                        config=effective_config,
+                        dataset=dataset,
+                        sample_sizes=sample_sizes,
+                        model_factory=model_factory,
+                        model_serializer=model_serializer,
+                        artifact_name=artifact_name,
+                        track_stage=track_stage,
+                    )
+                    return experiment.experiment_id
+
                 with track_stage("train_validation_test_split"):
                     train_dataset, validation_dataset, test_dataset = (
                         split_dataset_three_way(
@@ -901,14 +1131,24 @@ def run_experiment(
                                 * split_config.validation_size
                             ),
                             "train_subgraph_ids": train_dataset.subgraph_ids,
+                            "train_size_distribution": _size_distribution(
+                                train_dataset, sample_sizes
+                            ),
                             "validation_subgraph_ids": (
                                 validation_dataset.subgraph_ids
                             ),
+                            "validation_size_distribution": _size_distribution(
+                                validation_dataset, sample_sizes
+                            ),
                             "test_subgraph_ids": test_dataset.subgraph_ids,
+                            "test_size_distribution": _size_distribution(
+                                test_dataset, sample_sizes
+                            ),
                         },
                     )
 
                 with track_stage("model_training"):
+                    model = model_factory(config.model)
                     trained_model = TrainingPipeline(
                         dataset=train_dataset,
                         model=model,

@@ -1,6 +1,8 @@
 """Dataset splitting helpers."""
 
-from sklearn.model_selection import train_test_split
+from collections import Counter
+
+from sklearn.model_selection import StratifiedKFold, train_test_split
 
 from .dataset import Dataset
 
@@ -55,3 +57,44 @@ def split_dataset_three_way(
         Dataset(validation_samples, metadata=dataset.metadata),
         Dataset(test_samples, metadata=dataset.metadata),
     )
+
+
+def split_dataset_stratified_kfold(
+    dataset: Dataset,
+    strata: list[int],
+    *,
+    n_splits: int = 5,
+    random_state: int | None = 42,
+) -> list[tuple[Dataset, Dataset]]:
+    """Create reproducible folds preserving each configured size stratum."""
+    if len(strata) != dataset.num_samples:
+        raise ValueError("strata must contain one value per dataset sample.")
+    if isinstance(n_splits, bool) or not isinstance(n_splits, int):
+        raise TypeError("n_splits must be an integer.")
+    if n_splits < 2:
+        raise ValueError("n_splits must be at least 2.")
+    counts = Counter(strata)
+    if not counts or min(counts.values()) < n_splits:
+        raise ValueError(
+            "Each stratum must contain at least n_splits samples for "
+            "stratified K-fold."
+        )
+
+    splitter = StratifiedKFold(
+        n_splits=n_splits,
+        shuffle=True,
+        random_state=random_state,
+    )
+    samples = dataset.samples
+    folds = []
+    for train_indices, test_indices in splitter.split(dataset.X, strata):
+        train = Dataset(
+            [samples[index] for index in train_indices],
+            metadata=dataset.metadata,
+        )
+        test = Dataset(
+            [samples[index] for index in test_indices],
+            metadata=dataset.metadata,
+        )
+        folds.append((train, test))
+    return folds

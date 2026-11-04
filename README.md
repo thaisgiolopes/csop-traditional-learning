@@ -665,7 +665,7 @@ tests/
 
 ## Controlled Amazon and CiteSeer Experiments
 
-`experiments.run_csop_experiments` builds configurations from the existing CSOP presets. It supports Amazon and CiteSeer, target sizes from 10 through 500 vertices in steps of 10, configurable candidate counts and seeds, and LightGBM settings. For a selected graph, all selected sizes form one experiment: candidate datasets are combined, the train/test split is applied to that combined dataset, and one LightGBM model is trained across sizes. The `subgraph_size` feature identifies each candidate's size. `list` and `validate` do not run experiments.
+`experiments.run_csop_experiments` builds configurations from the existing CSOP presets. It supports Amazon and CiteSeer, target sizes from 10 through 500 vertices in steps of 10, configurable candidate counts and seeds, and LightGBM settings. For a selected graph, all selected sizes form one experiment: candidate datasets are combined, five-fold stratified cross-validation is applied to that dataset by subgraph size, and one LightGBM model is fit per fold. A final model is then fit on all samples for later prediction. The `subgraph_size` feature identifies each candidate's size. `list` and `validate` do not run experiments.
 
 Run the 20-sample size-10 pilot for both datasets:
 
@@ -689,6 +689,34 @@ python -m experiments.run_csop_experiments run --graph amazon --all-sizes --samp
 python -m experiments.run_csop_experiments run --all --samples 100 --seed 42
 ```
 
+Select a subset of node features by repeating `--node-feature`. The available
+values are `degree`, `pagerank`, `betweenness_centrality`,
+`closeness_centrality`, `eigenvector_centrality`, `k_core_number`,
+`triangle_count`, `local_clustering_coefficient`, `square_clustering`,
+`average_neighbor_degree`, and `normalized_degree`. If no node feature is
+specified, the default is `degree`; when specifying any feature explicitly,
+list every feature desired, including `degree` if it should remain enabled.
+Each selected node feature produces mean, max, min, and standard-deviation
+pooled columns.
+
+For a cheaper first comparison on CiteSeer, keep the default local degree and
+add local triangle count and normalized degree:
+
+```bash
+python -m experiments.run_csop_experiments validate \
+  --graph citeseer --size 10 --size 20 --samples 100 --seed 42 \
+  --node-feature degree --node-feature triangle_count \
+  --node-feature normalized_degree --node-scope local
+```
+
+Change `validate` to `run` after reviewing the selected feature columns.
+`local` computes a feature separately on each candidate. `global` computes it
+on the complete graph and pools the values for each candidate. Global
+betweenness is especially expensive on the 334,863 vertex Amazon graph, so
+begin with a pilot before enabling it there. Feature selection is persisted in
+the run configuration and changes the feature dataset, while compatible
+candidate subgraphs can still be reused.
+
 The default output root is `experiments/`. Pass the same `--output-root`
 and seed to let the SQLite candidate store reuse or extend a compatible
 candidate stream. Candidate compatibility includes the graph fingerprint,
@@ -699,8 +727,10 @@ datasets are rebuilt for each experiment and checked against their recorded
 feature configuration; the runner does not use them as a candidate cache.
 
 Each experiment stores its effective configuration, environment, candidate
-request and structures, datasets and split IDs, model, predictions, metrics,
-and stage time/RSS measurements. Re-running a selection creates a new
+request and structures, datasets, per-fold sample IDs and size distributions,
+fold models' metrics, a final model trained on all samples, out-of-fold
+predictions, and stage time/RSS measurements. The fold count can be changed
+with `--folds`. Re-running a selection creates a new
 experiment record; persistence can resume compatible candidate generation,
 not a partially trained model or an interrupted experiment stage.
 
