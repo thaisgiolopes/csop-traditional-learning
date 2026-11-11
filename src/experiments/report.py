@@ -266,6 +266,13 @@ class ExperimentReport:
                 record for record in metric_records
                 if record.experiment_id in selected_ids
             ]
+        stage_records.sort(
+            key=lambda record: (
+                record.experiment_id,
+                record.started_at or "",
+                record.stage_id,
+            )
+        )
 
         return {
             "experiments": self._typed_frame(experiments, "experiments"),
@@ -413,7 +420,10 @@ class ExperimentReport:
         experiment = self._database.get_experiment(experiment_id)
         config = self._load_configuration(experiment.configuration_path)
 
-        stages = self._database.get_experiment_stages(experiment_id)
+        stages = sorted(
+            self._database.get_experiment_stages(experiment_id),
+            key=lambda record: (record.started_at or "", record.stage_id),
+        )
         artifacts = self._database.get_experiment_artifacts(experiment_id)
         predictions = self._database.get_experiment_predictions(experiment_id)
         evaluations = self._database.get_experiment_evaluations(experiment_id)

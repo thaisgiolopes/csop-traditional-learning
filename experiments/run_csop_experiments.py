@@ -16,6 +16,7 @@ The ``--all`` option is required to execute the full graph-by-size batch.
 
 import argparse
 from collections.abc import Sequence
+import math
 from pathlib import Path
 import sys
 
@@ -93,12 +94,27 @@ def _add_run_arguments(
             help="Number of folds used for evaluation (default: 5).",
         )
         parser.add_argument(
+            "--test-ratio",
+            type=float,
+            default=0.2,
+            help="Fraction held out for final testing (default: 0.2).",
+        )
+        parser.add_argument(
             "--split-strategy",
-            choices=("stratified_kfold", "time_series_size"),
+            choices=("random", "stratified_kfold", "time_series_size"),
             default="stratified_kfold",
             help=(
-                "Use random stratified folds or forward folds by ordered "
-                "subgraph size."
+                "Use a random train/validation split, stratified folds, or "
+                "forward folds by ordered subgraph size."
+            ),
+        )
+        parser.add_argument(
+            "--validation-size",
+            type=float,
+            default=0.25,
+            help=(
+                "Fraction of development data used for validation with the "
+                "random split (default: 0.25)."
             ),
         )
     feature_group = parser.add_mutually_exclusive_group()
@@ -209,6 +225,8 @@ def _build_configs(
     node_features: Sequence[str] = ("degree",),
     node_scope: str = "local",
     folds: int = 5,
+    test_ratio: float = 0.2,
+    validation_size: float = 0.25,
     split_strategy: str = "stratified_kfold",
 ) -> list[ExperimentConfig]:
     if not 0 <= seed <= 2**32 - 1:
@@ -246,6 +264,8 @@ def _build_configs(
         node_features=node_features,
         node_scope=node_scope,
         n_splits=folds,
+        test_ratio=test_ratio,
+        validation_size=validation_size,
         split_strategy=split_strategy,
         output_paths=_output_paths(output_root),
     )
@@ -276,13 +296,17 @@ def _validate_config(config: ExperimentConfig) -> tuple[int, int]:
 
     sample_count = config.subgraph_generation.sample_count
     folds = config.dataset_split.parameters.get("n_splits", 5)
+    test_ratio = config.dataset_split.test_ratio or 0.2
+    minimum_samples_per_size = math.ceil(folds / (1 - test_ratio))
     if (
-        config.dataset_split.strategy == "stratified_kfold"
-        and sample_count < folds
+        config.dataset_split.strategy in {"stratified_kfold", "time_series_size"}
+        and sample_count < minimum_samples_per_size
     ):
         raise ValueError(
             f"{config.graph.source} k={target_size}: samples ({sample_count}) "
-            f"must be at least folds ({folds})."
+            f"must be at least {minimum_samples_per_size} per size to reserve "
+            "the final test set and retain enough development samples for "
+            "cross-validation at the configured test ratio."
         )
     return vertex_count, edge_count
 
@@ -485,6 +509,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             node_features=node_features,
             node_scope=args.node_scope,
             folds=args.folds,
+            test_ratio=args.test_ratio,
+            validation_size=args.validation_size,
             split_strategy=args.split_strategy,
         )
 

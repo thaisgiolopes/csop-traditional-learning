@@ -665,7 +665,7 @@ tests/
 
 ## Controlled Graph Experiments
 
-`experiments.run_csop_experiments` builds configurations from the existing CSOP presets. It supports Amazon, CiteSeer, and Patents, target sizes from 10 through 500 vertices in steps of 10, configurable candidate counts and seeds, and LightGBM settings. For a selected graph, all selected sizes form one experiment: candidate datasets are combined, five-fold stratified cross-validation is applied by default, and one LightGBM model is fit per fold. A final model is then fit on all samples for later prediction. `--split-strategy time_series_size` instead uses forward folds over ordered, equally spaced sizes, so each test fold contains larger sizes than its training fold. The `subgraph_size` feature identifies each candidate's size. `list` and `validate` do not run experiments.
+`experiments.run_csop_experiments` builds configurations from the existing CSOP presets. It supports Amazon, CiteSeer, and Patents, target sizes from 10 through 500 vertices in steps of 10, configurable candidate counts and seeds, and LightGBM settings. For a selected graph, all selected sizes form one experiment: candidate datasets are combined, a stratified 20% final test set is held out, and five-fold cross-validation runs on the remaining 80%. Fold metrics (including R²) are calculated on each fold's validation partition. A final model is fit on the full 80% development set and evaluated once on the untouched test set. `--test-ratio` changes the held-out fraction. `--split-strategy random` runs a random train/validation/test split, with `--validation-size` controlling validation within the development portion. `--split-strategy time_series_size` uses forward folds over ordered, equally spaced development sizes, so each validation fold contains larger sizes than its training fold. The `subgraph_size` feature identifies each candidate's size. `list` and `validate` do not run experiments.
 
 Run the 20-sample size-10 pilot for both datasets:
 
@@ -756,9 +756,10 @@ feature configuration; the runner does not use them as a candidate cache.
 
 Each experiment stores its effective configuration, environment, candidate
 request and structures, datasets, per-fold sample IDs and size distributions,
-fold models' metrics, a final model trained on all samples, out-of-fold
-predictions, and stage time/RSS measurements. The fold count can be changed
-with `--folds`. Re-running a selection creates a new
+fold models' validation metrics, final test metrics and predictions, CV
+predictions, a final model trained on the 80% development set, and stage
+time/RSS measurements. The fold count can be changed with `--folds`, and the
+final test fraction with `--test-ratio`. Re-running a selection creates a new
 experiment record; persistence can resume compatible candidate generation,
 not a partially trained model or an interrupted experiment stage.
 

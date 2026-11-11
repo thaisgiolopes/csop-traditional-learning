@@ -73,6 +73,8 @@ def build_csop_configs(
     node_features: Iterable[str] = ("degree",),
     node_scope: str = "local",
     n_splits: int = 5,
+    test_ratio: float = 0.2,
+    validation_size: float = 0.25,
     split_strategy: str = "stratified_kfold",
     output_paths: Mapping[str, str] | None = None,
 ) -> list[ExperimentConfig]:
@@ -172,10 +174,22 @@ def build_csop_configs(
                     ),
                     dataset_split=DatasetSplitConfig(
                         strategy=split_strategy,
-                        test_ratio=None,
-                        validation_size=None,
+                        test_ratio=(
+                            test_ratio
+                            if split_strategy in {
+                                "random", "stratified_kfold", "time_series_size"
+                            }
+                            else None
+                        ),
+                        validation_size=(
+                            validation_size if split_strategy == "random" else None
+                        ),
                         random_state=(
-                            seed if split_strategy == "stratified_kfold" else None
+                            seed
+                            if split_strategy in {
+                                "random", "stratified_kfold", "time_series_size"
+                            }
+                            else None
                         ),
                         parameters={"n_splits": n_splits},
                     ),

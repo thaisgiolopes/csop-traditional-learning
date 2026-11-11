@@ -20,6 +20,7 @@ from src.dataset.dataset import Dataset
 from src.dataset.loader import DatasetLoader
 from src.dataset.splitter import (
     split_dataset_by_ordered_groups,
+    split_dataset_stratified_holdout,
     split_dataset_stratified_kfold,
     split_dataset_three_way,
 )
@@ -469,20 +470,31 @@ def _run_size_cross_validation(
     artifact_name: Callable[[str], str],
     track_stage: Callable[[str], Any],
 ) -> None:
-    """Evaluate grouped sizes by stratified or forward-only folds."""
+    """Cross-validate on development data and evaluate a held-out test set."""
     n_splits = config.dataset_split.parameters.get("n_splits", 5)
     strata = [sample_sizes[sample.sample_id] for sample in dataset.samples]
-    if config.dataset_split.strategy == "stratified_kfold":
-        folds = split_dataset_stratified_kfold(
+    test_ratio = config.dataset_split.test_ratio or 0.2
+    with track_stage("external_test_holdout"):
+        development_dataset, test_dataset = split_dataset_stratified_holdout(
             dataset,
             strata,
+            test_size=test_ratio,
+            random_state=config.dataset_split.random_state,
+        )
+    development_strata = [
+        sample_sizes[sample.sample_id] for sample in development_dataset.samples
+    ]
+    if config.dataset_split.strategy == "stratified_kfold":
+        folds = split_dataset_stratified_kfold(
+            development_dataset,
+            development_strata,
             n_splits=n_splits,
             random_state=config.dataset_split.random_state,
         )
     elif config.dataset_split.strategy == "time_series_size":
         folds = split_dataset_by_ordered_groups(
-            dataset,
-            strata,
+            development_dataset,
+            development_strata,
             n_splits=n_splits,
         )
     else:
@@ -504,35 +516,51 @@ def _run_size_cross_validation(
                 else "stratified_random_folds"
             ),
             "n_splits": n_splits,
+            "test_ratio": test_ratio,
+            "holdout_random_state": config.dataset_split.random_state,
             "random_state": (
                 config.dataset_split.random_state
                 if config.dataset_split.strategy == "stratified_kfold"
                 else None
             ),
             "total_sample_count": dataset.num_samples,
-            "total_size_distribution": _size_distribution(dataset, sample_sizes),
+            "development_sample_count": development_dataset.num_samples,
+            "test_sample_count": test_dataset.num_samples,
+            "development_size_distribution": _size_distribution(
+                development_dataset, sample_sizes
+            ),
+            "test_size_distribution": _size_distribution(test_dataset, sample_sizes),
+            "test_subgraph_ids": test_dataset.subgraph_ids,
+            "development_subgraph_ids": development_dataset.subgraph_ids,
             "folds": [],
         }
-        for fold_index, (train_dataset, test_dataset) in enumerate(folds, start=1):
+        for fold_index, (train_dataset, fold_validation_dataset) in enumerate(
+            folds, start=1
+        ):
             train_ids = set(train_dataset.subgraph_ids)
-            test_ids = set(test_dataset.subgraph_ids)
-            if train_ids & test_ids:
+            validation_ids = set(fold_validation_dataset.subgraph_ids)
+            if train_ids & validation_ids:
                 raise RuntimeError(f"Fold {fold_index} train/test overlap.")
-            test_seen.extend(str(sample_id) for sample_id in test_dataset.subgraph_ids)
+            test_seen.extend(
+                str(sample_id)
+                for sample_id in fold_validation_dataset.subgraph_ids
+            )
             split_metadata["folds"].append(
                 {
                     "fold": fold_index,
                     "train_sample_count": train_dataset.num_samples,
-                    "test_sample_count": test_dataset.num_samples,
+                    "test_sample_count": fold_validation_dataset.num_samples,
                     "train_size_distribution": _size_distribution(
                         train_dataset, sample_sizes
                     ),
                     "test_size_distribution": _size_distribution(
-                        test_dataset, sample_sizes
+                        fold_validation_dataset, sample_sizes
                     ),
                 }
             )
-        expected_ids = [str(sample_id) for sample_id in dataset.subgraph_ids]
+        expected_ids = [
+            str(sample_id) for sample_id in development_dataset.subgraph_ids
+        ]
         if config.dataset_split.strategy == "stratified_kfold":
             expected_evaluation_ids = expected_ids
         else:
@@ -543,7 +571,7 @@ def _run_size_cross_validation(
             }
             expected_evaluation_ids = [
                 str(sample.subgraph_id)
-                for sample in dataset.samples
+                for sample in development_dataset.samples
                 if sample_sizes[sample.sample_id] in tested_sizes
             ]
         if sorted(test_seen) != sorted(expected_evaluation_ids):
@@ -558,7 +586,9 @@ def _run_size_cross_validation(
             split_metadata,
         )
 
-    for fold_index, (train_dataset, test_dataset) in enumerate(folds, start=1):
+    for fold_index, (train_dataset, fold_validation_dataset) in enumerate(
+        folds, start=1
+    ):
         with track_stage(f"fold_{fold_index}_model_training"):
             fold_model = model_factory(config.model)
             fold_model = TrainingPipeline(
@@ -569,7 +599,7 @@ def _run_size_cross_validation(
         with track_stage(f"fold_{fold_index}_evaluation") as stage:
             result = PredictionPipeline(
                 model=fold_model,
-                dataset=test_dataset,
+                dataset=fold_validation_dataset,
                 predictor=Predictor(fold_model),
                 evaluator=Evaluator(),
             ).run()
@@ -578,7 +608,7 @@ def _run_size_cross_validation(
             record = {
                 "fold": fold_index,
                 "num_train_samples": train_dataset.num_samples,
-                "num_test_samples": test_dataset.num_samples,
+                "num_test_samples": fold_validation_dataset.num_samples,
                 "metrics": values,
             }
             fold_records.append(record)
@@ -624,11 +654,13 @@ def _run_size_cross_validation(
                     split="cv_std",
                 )
 
-    # Persist a deployable model refit on all observations after unbiased
-    # out-of-fold evaluation is complete.
-    with track_stage("final_model_training_on_all_samples"):
+    # Refit on all development observations, keeping the external test set
+    # untouched until the final evaluation.
+    with track_stage("final_model_training_on_development_data"):
         final_model = model_factory(config.model)
-        final_model = TrainingPipeline(dataset=dataset, model=final_model).run()
+        final_model = TrainingPipeline(
+            dataset=development_dataset, model=final_model
+        ).run()
         if model_serializer is not None:
             model_text = model_serializer(final_model)
             experiment.artifact_store.save_text(
@@ -638,11 +670,44 @@ def _run_size_cross_validation(
                 "models", artifact_name("model.txt"), "text/plain"
             )
 
+    with track_stage("test_evaluation") as test_stage:
+        test_result = PredictionPipeline(
+            model=final_model,
+            dataset=test_dataset,
+            predictor=Predictor(final_model),
+            evaluator=Evaluator(),
+        ).run()
+        test_metrics = _metric_values(test_result.evaluation)
+    for metric_name, metric_value in test_metrics.items():
+        if metric_value is not None:
+            experiment.register_metric(
+                metric_name,
+                metric_value,
+                stage_id=test_stage.stage_id,
+                split="test",
+            )
+
     with track_stage("result_artifact_persistence"):
-        predictions_path = experiment.artifact_store.save_text(
+        experiment.artifact_store.save_text(
+            "predictions",
+            artifact_name("cv_predictions.csv"),
+            _predictions_to_csv(out_of_fold_predictions),
+        )
+        experiment.register_artifact(
+            "predictions", artifact_name("cv_predictions.csv"), "text/csv"
+        )
+        experiment.artifact_store.save_text(
+            "datasets",
+            artifact_name("test_dataset.csv"),
+            _dataset_to_csv(test_dataset),
+        )
+        experiment.register_artifact(
+            "datasets", artifact_name("test_dataset.csv"), "text/csv"
+        )
+        experiment.artifact_store.save_text(
             "predictions",
             artifact_name("predictions.csv"),
-            _predictions_to_csv(out_of_fold_predictions),
+            _predictions_to_csv(test_result.predictions),
         )
         experiment.register_artifact(
             "predictions", artifact_name("predictions.csv"), "text/csv"
@@ -657,10 +722,14 @@ def _run_size_cross_validation(
                 "folds": fold_records,
                 "mean": means,
                 "std": deviations,
-                "final_model": "refit_on_all_samples_after_cross_validation",
+                "test": {
+                    "num_samples": test_result.evaluation.num_samples,
+                    "metrics": test_metrics,
+                },
+                "final_model": "refit_on_development_data_after_cross_validation",
             },
         )
-        for prediction in out_of_fold_predictions:
+        for prediction in test_result.predictions:
             actual = prediction.true_target
             error = (
                 prediction.predicted_target - actual

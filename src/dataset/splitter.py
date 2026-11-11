@@ -63,6 +63,34 @@ def split_dataset_three_way(
     )
 
 
+def split_dataset_stratified_holdout(
+    dataset: Dataset,
+    strata: list[int],
+    *,
+    test_size: float = 0.2,
+    random_state: int | None = 42,
+) -> tuple[Dataset, Dataset]:
+    """Reserve a reproducible, stratified final test set from a dataset."""
+    if len(strata) != dataset.num_samples:
+        raise ValueError("strata must contain one value per dataset sample.")
+    if isinstance(test_size, bool) or not isinstance(test_size, (int, float)):
+        raise TypeError("test_size must be numeric.")
+    if not 0 < test_size < 1:
+        raise ValueError("test_size must be greater than 0 and less than 1.")
+
+    development_samples, test_samples = train_test_split(
+        dataset.samples,
+        test_size=test_size,
+        random_state=random_state,
+        shuffle=True,
+        stratify=strata,
+    )
+    return (
+        Dataset(development_samples, metadata=dataset.metadata),
+        Dataset(test_samples, metadata=dataset.metadata),
+    )
+
+
 def split_dataset_stratified_kfold(
     dataset: Dataset,
     strata: list[int],

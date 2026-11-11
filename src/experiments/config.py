@@ -187,22 +187,30 @@ class DatasetSplitConfig:
                         f"{field_name} must be greater than 0 and less than 1."
                     )
         elif self.strategy == "stratified_kfold":
-            if self.test_ratio is not None or self.validation_size is not None:
-                raise ValueError(
-                    "stratified_kfold requires test_ratio and validation_size "
-                    "to be None."
-                )
+            if self.validation_size is not None:
+                raise ValueError("stratified_kfold does not use validation_size.")
+            if self.test_ratio is not None and (
+                isinstance(self.test_ratio, bool)
+                or not isinstance(self.test_ratio, (int, float))
+                or not math.isfinite(self.test_ratio)
+                or not 0 < self.test_ratio < 1
+            ):
+                raise ValueError("test_ratio must be between zero and one.")
             n_splits = self.parameters.get("n_splits", 5)
             if isinstance(n_splits, bool) or not isinstance(n_splits, int):
                 raise TypeError("stratified_kfold n_splits must be an integer.")
             if n_splits < 2:
                 raise ValueError("stratified_kfold n_splits must be at least 2.")
         elif self.strategy == "time_series_size":
-            if self.test_ratio is not None or self.validation_size is not None:
-                raise ValueError(
-                    "time_series_size requires test_ratio and validation_size "
-                    "to be None."
-                )
+            if self.validation_size is not None:
+                raise ValueError("time_series_size does not use validation_size.")
+            if self.test_ratio is not None and (
+                isinstance(self.test_ratio, bool)
+                or not isinstance(self.test_ratio, (int, float))
+                or not math.isfinite(self.test_ratio)
+                or not 0 < self.test_ratio < 1
+            ):
+                raise ValueError("test_ratio must be between zero and one.")
             n_splits = self.parameters.get("n_splits", 5)
             if isinstance(n_splits, bool) or not isinstance(n_splits, int):
                 raise TypeError("time_series_size n_splits must be an integer.")

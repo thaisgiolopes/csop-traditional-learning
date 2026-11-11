@@ -39,3 +39,7 @@ models/
 *.log
 
 *.sqlite3
+
+# Experiment outputs (keep generated results local)
+experiments/runs/
+experiments/reports/experiments.xlsx
