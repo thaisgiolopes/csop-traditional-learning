@@ -195,7 +195,6 @@ class ExperimentManager:
             report = ExperimentReport(self.database)
             with self.tracker.track_stage("report_persistence"):
                 report.update_xlsx(self.report_path, self.experiment_id)
-            report.update_xlsx(self.report_path, self.experiment_id)
         except Exception:
             self.logger.exception(
                 "Could not update experiment XLSX report at %s",
@@ -239,6 +238,7 @@ class ExperimentManager:
         predicted_value: float,
         actual_value: float | None = None,
         prediction_error: float | None = None,
+        split: str | None = None,
     ):
         """Register one scalar prediction through the tracker."""
         return self.tracker.register_prediction(
@@ -246,6 +246,7 @@ class ExperimentManager:
             predicted_value=predicted_value,
             actual_value=actual_value,
             prediction_error=prediction_error,
+            split=split,
         )
 
     def register_evaluation(self, metric_name: str, metric_value: float):

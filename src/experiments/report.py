@@ -122,6 +122,7 @@ XLSX_SHEETS = {
         "experiment_id",
         "prediction_id",
         "sample_id",
+        "split",
         "predicted_value",
         "actual_value",
         "prediction_error",
@@ -490,6 +491,7 @@ class ExperimentReport:
                 "experiment_id": item.experiment_id,
                 "prediction_id": item.prediction_id,
                 "sample_id": item.sample_id,
+                "split": item.split,
                 "predicted_value": item.predicted_value,
                 "actual_value": item.actual_value,
                 "prediction_error": item.prediction_error,
@@ -698,6 +700,18 @@ class ExperimentReport:
             existing_headers = tuple(
                 cell.value for cell in worksheet[1]
             )
+            legacy_prediction_headers = (
+                "experiment_id",
+                "prediction_id",
+                "sample_id",
+                "predicted_value",
+                "actual_value",
+                "prediction_error",
+            )
+            if name == "Predictions" and existing_headers == legacy_prediction_headers:
+                worksheet.insert_cols(4)
+                worksheet.cell(1, 4, "split")
+                existing_headers = tuple(cell.value for cell in worksheet[1])
             if existing_headers != headers:
                 raise ValueError(
                     f"Unexpected columns in XLSX sheet {name!r}."

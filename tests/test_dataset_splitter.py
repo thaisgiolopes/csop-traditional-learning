@@ -3,6 +3,7 @@ import pytest
 from src.dataset.dataset import Dataset
 from src.dataset.sample import Sample
 from src.dataset.splitter import (
+    split_dataset_by_future_groups,
     split_dataset_by_ordered_groups,
     split_dataset_stratified_kfold,
     split_dataset_three_way,
@@ -185,3 +186,32 @@ def test_ordered_group_split_rejects_uneven_spacing():
     dataset = make_dataset(size=len(groups))
     with pytest.raises(ValueError, match="equally spaced"):
         split_dataset_by_ordered_groups(dataset, groups, n_splits=2)
+
+
+def test_future_group_holdout_reserves_latest_sizes_after_development_folds():
+    groups = [size for size in (10, 20, 30, 40, 50, 60, 70, 80) for _ in range(5)]
+    dataset = Dataset(
+        [
+            Sample(
+                graph_id="graph",
+                subgraph_id=index,
+                features={"value": float(index)},
+                target=float(index),
+            )
+            for index in range(len(groups))
+        ]
+    )
+
+    development, test = split_dataset_by_future_groups(
+        dataset, groups, test_size=0.25, n_splits=3
+    )
+
+    development_groups = {groups[index] for index in development.subgraph_ids}
+    test_groups = {groups[index] for index in test.subgraph_ids}
+    assert max(development_groups) < min(test_groups)
+    assert development.num_samples == 30
+    assert test.num_samples == 10
+    assert set(development.subgraph_ids).isdisjoint(test.subgraph_ids)
+    assert set(development.subgraph_ids) | set(test.subgraph_ids) == set(
+        dataset.subgraph_ids
+    )

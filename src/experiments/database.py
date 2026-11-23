@@ -98,6 +98,7 @@ class PredictionRecord:
     predicted_value: float
     actual_value: float | None
     prediction_error: float | None
+    split: str | None = None
 
 
 @dataclass(frozen=True)
@@ -251,6 +252,7 @@ class ExperimentDatabase:
                 predicted_value REAL NOT NULL,
                 actual_value REAL,
                 prediction_error REAL,
+                split TEXT,
                 FOREIGN KEY (experiment_id)
                     REFERENCES experiments(experiment_id)
                     ON DELETE CASCADE
@@ -347,6 +349,12 @@ class ExperimentDatabase:
             );
             """
         )
+        prediction_columns = {
+            row["name"]
+            for row in self._connection.execute("PRAGMA table_info(predictions)")
+        }
+        if "split" not in prediction_columns:
+            self._connection.execute("ALTER TABLE predictions ADD COLUMN split TEXT")
         self._migrate_sample_requests_to_batch_schema()
         self._migrate_evaluations_to_metrics()
         self._connection.commit()
@@ -646,6 +654,7 @@ class ExperimentDatabase:
         predicted_value: float,
         actual_value: float | None = None,
         prediction_error: float | None = None,
+        split: str | None = None,
     ) -> PredictionRecord:
         """Register scalar prediction metadata, not prediction arrays."""
         _require_text(experiment_id, "experiment_id")
@@ -653,6 +662,7 @@ class ExperimentDatabase:
         _require_finite(predicted_value, "predicted_value")
         _require_finite(actual_value, "actual_value")
         _require_finite(prediction_error, "prediction_error")
+        _require_optional_text(split, "split")
 
         self._ensure_open()
         with self._connection:
@@ -660,8 +670,8 @@ class ExperimentDatabase:
                 """
                 INSERT INTO predictions (
                     experiment_id, sample_id, predicted_value,
-                    actual_value, prediction_error
-                ) VALUES (?, ?, ?, ?, ?)
+                    actual_value, prediction_error, split
+                ) VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 (
                     experiment_id,
@@ -669,6 +679,7 @@ class ExperimentDatabase:
                     predicted_value,
                     actual_value,
                     prediction_error,
+                    split,
                 ),
             )
             row = self._connection.execute(

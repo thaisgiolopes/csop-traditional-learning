@@ -186,3 +186,74 @@ def split_dataset_by_ordered_groups(
             )
         )
     return folds
+
+
+def split_dataset_by_future_groups(
+    dataset: Dataset,
+    groups: list[int],
+    *,
+    test_size: float,
+    n_splits: int,
+) -> tuple[Dataset, Dataset]:
+    """Reserve the latest ordered groups for a final temporal test set.
+
+    The development portion retains enough groups for ``TimeSeriesSplit``
+    with ``n_splits`` folds. When groups contain different sample counts,
+    the contiguous suffix closest to ``test_size`` is selected.
+    """
+    if len(groups) != dataset.num_samples:
+        raise ValueError("groups must contain one value per dataset sample.")
+    if isinstance(test_size, bool) or not isinstance(test_size, (int, float)):
+        raise TypeError("test_size must be numeric.")
+    if not 0 < test_size < 1:
+        raise ValueError("test_size must be greater than 0 and less than 1.")
+    if isinstance(n_splits, bool) or not isinstance(n_splits, int):
+        raise TypeError("n_splits must be an integer.")
+    if n_splits < 2:
+        raise ValueError("n_splits must be at least 2.")
+
+    ordered_groups = sorted(set(groups))
+    if len(ordered_groups) <= n_splits + 1:
+        raise ValueError(
+            "A future-group holdout requires more than n_splits + 1 groups."
+        )
+    intervals = {
+        current - previous
+        for previous, current in zip(ordered_groups, ordered_groups[1:])
+    }
+    if len(intervals) != 1:
+        raise ValueError(
+            "Ordered groups must be equally spaced for comparable "
+            "TimeSeriesSplit folds."
+        )
+
+    samples = dataset.samples
+    indices_by_group = {
+        group: [index for index, value in enumerate(groups) if value == group]
+        for group in ordered_groups
+    }
+    desired_test_count = dataset.num_samples * test_size
+    # Leave at least n_splits + 1 groups in development; TimeSeriesSplit
+    # requires more groups than folds.
+    candidate_cuts = range(n_splits + 1, len(ordered_groups))
+    cut = min(
+        candidate_cuts,
+        key=lambda index: abs(
+            sum(len(indices_by_group[group]) for group in ordered_groups[index:])
+            - desired_test_count
+        ),
+    )
+    development_indices = [
+        index
+        for group in ordered_groups[:cut]
+        for index in indices_by_group[group]
+    ]
+    test_indices = [
+        index
+        for group in ordered_groups[cut:]
+        for index in indices_by_group[group]
+    ]
+    return (
+        Dataset([samples[index] for index in development_indices], dataset.metadata),
+        Dataset([samples[index] for index in test_indices], dataset.metadata),
+    )

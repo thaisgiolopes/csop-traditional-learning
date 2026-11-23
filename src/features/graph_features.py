@@ -25,13 +25,7 @@ class SubgraphSizeFeature(Feature):
 
 
 class NumVerticesFeature(Feature):
-	"""
-	Computes the number of vertices in the complete graph.
-
-	This is a GLOBAL + GRAPH feature: it describes the complete graph
-	instance. A future LOCAL + GRAPH feature would instead describe the
-	candidate subgraph available in the same FeatureContext.
-	"""
+	"""Return the number of vertices in the candidate subgraph."""
 
 	@property
 	def name(self) -> str:
@@ -40,8 +34,8 @@ class NumVerticesFeature(Feature):
 
 	@property
 	def scope(self) -> FeatureScope:
-		"""Return the global scope of the feature."""
-		return FeatureScope.GLOBAL
+		"""Return the candidate-local scope of the feature."""
+		return FeatureScope.LOCAL
 
 	@property
 	def level(self) -> FeatureLevel:
@@ -50,14 +44,14 @@ class NumVerticesFeature(Feature):
 
 	def compute(self, context: FeatureContext) -> int:
 		"""
-		Return the number of vertices in the complete graph.
+		Return the number of vertices in the candidate subgraph.
 
 		Args:
 			context: The complete graph and candidate subgraph available
 				to the feature.
 
 		Returns:
-			int: The number of vertices in ``context.full_graph``.
+				int: The number of vertices in ``context.subgraph``.
 
 		Raises:
 			TypeError: If context is not a FeatureContext instance.
@@ -65,17 +59,11 @@ class NumVerticesFeature(Feature):
 		if not isinstance(context, FeatureContext):
 			raise TypeError("context must be a FeatureContext instance.")
 
-		return context.full_graph.num_vertices
+		return context.subgraph.num_vertices
 
 
 class NumEdgesFeature(Feature):
-	"""
-	Computes the number of edges in the complete graph.
-
-	This is a GLOBAL + GRAPH feature: it describes the complete graph
-	instance. A future LOCAL + GRAPH feature would instead describe the
-	candidate subgraph available in the same FeatureContext.
-	"""
+	"""Return the number of edges in the candidate subgraph."""
 
 	@property
 	def name(self) -> str:
@@ -84,8 +72,8 @@ class NumEdgesFeature(Feature):
 
 	@property
 	def scope(self) -> FeatureScope:
-		"""Return the global scope of the feature."""
-		return FeatureScope.GLOBAL
+		"""Return the candidate-local scope of the feature."""
+		return FeatureScope.LOCAL
 
 	@property
 	def level(self) -> FeatureLevel:
@@ -94,14 +82,14 @@ class NumEdgesFeature(Feature):
 
 	def compute(self, context: FeatureContext) -> int:
 		"""
-		Return the number of edges in the complete graph.
+		Return the number of edges in the candidate subgraph.
 
 		Args:
 			context: The complete graph and candidate subgraph available
 				to the feature.
 
 		Returns:
-			int: The number of edges in ``context.full_graph``.
+				int: The number of edges in ``context.subgraph``.
 
 		Raises:
 			TypeError: If context is not a FeatureContext instance.
@@ -109,4 +97,4 @@ class NumEdgesFeature(Feature):
 		if not isinstance(context, FeatureContext):
 			raise TypeError("context must be a FeatureContext instance.")
 
-		return context.full_graph.num_edges
+		return context.subgraph.num_edges

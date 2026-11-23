@@ -246,9 +246,10 @@ def _build_configs(
         raise ValueError("--max-attempts must be positive.")
     if split_strategy == "time_series_size":
         ordered_sizes = sorted(sizes)
-        if len(ordered_sizes) <= folds:
+        if len(ordered_sizes) <= folds + 1:
             raise ValueError(
-                "time_series_size requires more selected sizes than folds."
+                "time_series_size needs at least one final test size group and "
+                "more development size groups than folds."
             )
         if len({right - left for left, right in zip(ordered_sizes, ordered_sizes[1:])}) != 1:
             raise ValueError(

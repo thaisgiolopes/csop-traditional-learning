@@ -20,6 +20,7 @@ from src.dataset.dataset import Dataset
 from src.dataset.loader import DatasetLoader
 from src.dataset.splitter import (
     split_dataset_by_ordered_groups,
+    split_dataset_by_future_groups,
     split_dataset_stratified_holdout,
     split_dataset_stratified_kfold,
     split_dataset_three_way,
@@ -32,7 +33,6 @@ from src.features.engine import FeatureEngine
 from src.features.graph_features import (
     NumEdgesFeature,
     NumVerticesFeature,
-    SubgraphSizeFeature,
 )
 from src.features.node_features import (
     AverageNeighborDegreeFeature,
@@ -99,8 +99,6 @@ def _build_feature_set(
             )
         include_degree = enabled_features is None or "degree" in enabled_features
         features = [NumVerticesFeature(), NumEdgesFeature()]
-        if feature_set_id == "graph-size-local-degree-and-subgraph-size-v2":
-            features.append(SubgraphSizeFeature())
         if include_degree:
             features.append(DegreeFeature(scope=FeatureScope.LOCAL))
         feature_engine = FeatureEngine(
@@ -119,9 +117,14 @@ def _build_feature_set(
     node_feature_scopes = {
         "graph-size-and-node-structure-local-v1": FeatureScope.LOCAL,
         "graph-size-and-node-structure-global-v1": FeatureScope.GLOBAL,
+        "candidate-structure-local-v2": FeatureScope.LOCAL,
+        "candidate-structure-global-v2": FeatureScope.GLOBAL,
     }
-    include_candidate_size = "-with-subgraph-size-v1" in feature_set_id
-    if include_candidate_size:
+    legacy_subgraph_size_set = "-with-subgraph-size-v1" in feature_set_id
+    # v2 exposes degree as a selectable node feature. The legacy suffix is
+    # retained only so older experiment configurations remain loadable.
+    include_degree = legacy_subgraph_size_set or feature_set_id.endswith("-v2")
+    if legacy_subgraph_size_set:
         scope_key = feature_set_id.removeprefix(
             "graph-size-node-structure-"
         ).removesuffix("-with-subgraph-size-v1")
@@ -148,7 +151,7 @@ def _build_feature_set(
             feature.name.removesuffix("_local").removesuffix("_global"): feature
             for feature in available_node_features
         }
-        if include_candidate_size:
+        if include_degree:
             feature_by_id["degree"] = DegreeFeature(scope=scope)
         available_feature_ids = set(feature_by_id)
         requested_feature_ids = (
@@ -164,8 +167,6 @@ def _build_feature_set(
             )
         node_features = [feature_by_id[name] for name in requested_feature_ids]
         graph_features = [NumVerticesFeature(), NumEdgesFeature()]
-        if include_candidate_size:
-            graph_features.append(SubgraphSizeFeature())
         feature_engine = FeatureEngine(features=[*graph_features, *node_features])
         pooling_strategies = {
             feature.name: (
@@ -475,12 +476,20 @@ def _run_size_cross_validation(
     strata = [sample_sizes[sample.sample_id] for sample in dataset.samples]
     test_ratio = config.dataset_split.test_ratio or 0.2
     with track_stage("external_test_holdout"):
-        development_dataset, test_dataset = split_dataset_stratified_holdout(
-            dataset,
-            strata,
-            test_size=test_ratio,
-            random_state=config.dataset_split.random_state,
-        )
+        if config.dataset_split.strategy == "time_series_size":
+            development_dataset, test_dataset = split_dataset_by_future_groups(
+                dataset,
+                strata,
+                test_size=test_ratio,
+                n_splits=n_splits,
+            )
+        else:
+            development_dataset, test_dataset = split_dataset_stratified_holdout(
+                dataset,
+                strata,
+                test_size=test_ratio,
+                random_state=config.dataset_split.random_state,
+            )
     development_strata = [
         sample_sizes[sample.sample_id] for sample in development_dataset.samples
     ]
@@ -504,16 +513,21 @@ def _run_size_cross_validation(
         )
     fold_records = []
     out_of_fold_predictions: list[PredictionResult] = []
-    test_seen: list[str] = []
+    validation_seen: list[str] = []
 
     with track_stage("split_characterization"):
         split_metadata = {
             "strategy": config.dataset_split.strategy,
             "grouping_key": "subgraph_size",
             "train_test_order": (
-                "train_sizes_strictly_below_test_sizes"
+                "development_sizes_strictly_below_final_test_sizes"
                 if config.dataset_split.strategy == "time_series_size"
                 else "stratified_random_folds"
+            ),
+            "final_test_strategy": (
+                "latest_ordered_groups"
+                if config.dataset_split.strategy == "time_series_size"
+                else "stratified_random_holdout"
             ),
             "n_splits": n_splits,
             "test_ratio": test_ratio,
@@ -541,7 +555,7 @@ def _run_size_cross_validation(
             validation_ids = set(fold_validation_dataset.subgraph_ids)
             if train_ids & validation_ids:
                 raise RuntimeError(f"Fold {fold_index} train/test overlap.")
-            test_seen.extend(
+            validation_seen.extend(
                 str(sample_id)
                 for sample_id in fold_validation_dataset.subgraph_ids
             )
@@ -549,11 +563,11 @@ def _run_size_cross_validation(
                 {
                     "fold": fold_index,
                     "train_sample_count": train_dataset.num_samples,
-                    "test_sample_count": fold_validation_dataset.num_samples,
+                    "validation_sample_count": fold_validation_dataset.num_samples,
                     "train_size_distribution": _size_distribution(
                         train_dataset, sample_sizes
                     ),
-                    "test_size_distribution": _size_distribution(
+                    "validation_size_distribution": _size_distribution(
                         fold_validation_dataset, sample_sizes
                     ),
                 }
@@ -567,14 +581,14 @@ def _run_size_cross_validation(
             tested_sizes = {
                 int(size)
                 for fold in split_metadata["folds"]
-                for size in fold["test_size_distribution"]
+                for size in fold["validation_size_distribution"]
             }
             expected_evaluation_ids = [
                 str(sample.subgraph_id)
                 for sample in development_dataset.samples
                 if sample_sizes[sample.sample_id] in tested_sizes
             ]
-        if sorted(test_seen) != sorted(expected_evaluation_ids):
+        if sorted(validation_seen) != sorted(expected_evaluation_ids):
             raise RuntimeError(
                 "Cross-validation test partitions do not match the expected "
                 "sample coverage."
@@ -605,11 +619,22 @@ def _run_size_cross_validation(
             ).run()
             values = _metric_values(result.evaluation)
             out_of_fold_predictions.extend(result.predictions)
+            train_metrics = _metric_values(
+                Evaluator().evaluate(
+                    train_dataset.y,
+                    fold_model.predict(train_dataset.X),
+                )
+            )
             record = {
                 "fold": fold_index,
-                "num_train_samples": train_dataset.num_samples,
-                "num_test_samples": fold_validation_dataset.num_samples,
-                "metrics": values,
+                "train": {
+                    "num_samples": train_dataset.num_samples,
+                    "metrics": train_metrics,
+                },
+                "validation": {
+                    "num_samples": fold_validation_dataset.num_samples,
+                    "metrics": values,
+                },
             }
             fold_records.append(record)
         for metric_name, metric_value in values.items():
@@ -618,15 +643,31 @@ def _run_size_cross_validation(
                     metric_name,
                     metric_value,
                     stage_id=stage.stage_id,
-                    split=f"fold_{fold_index}",
+                    split=f"fold_{fold_index}_validation",
+                )
+        for metric_name, metric_value in train_metrics.items():
+            if metric_value is not None:
+                experiment.register_metric(
+                    metric_name,
+                    metric_value,
+                    stage_id=stage.stage_id,
+                    split=f"fold_{fold_index}_train",
                 )
 
     metric_names = ("mae", "rmse", "r2")
     values_by_metric = {
         metric: [
-            record["metrics"][metric]
+            record["validation"]["metrics"][metric]
             for record in fold_records
-            if record["metrics"][metric] is not None
+            if record["validation"]["metrics"][metric] is not None
+        ]
+        for metric in metric_names
+    }
+    train_values_by_metric = {
+        metric: [
+            record["train"]["metrics"][metric]
+            for record in fold_records
+            if record["train"]["metrics"][metric] is not None
         ]
         for metric in metric_names
     }
@@ -637,6 +678,14 @@ def _run_size_cross_validation(
     deviations = {
         metric: pstdev(values) if values else None
         for metric, values in values_by_metric.items()
+    }
+    train_means = {
+        metric: fmean(values) if values else None
+        for metric, values in train_values_by_metric.items()
+    }
+    train_deviations = {
+        metric: pstdev(values) if values else None
+        for metric, values in train_values_by_metric.items()
     }
     with track_stage("cross_validation_metric_aggregation") as aggregate_stage:
         for metric_name in metric_names:
@@ -654,21 +703,13 @@ def _run_size_cross_validation(
                     split="cv_std",
                 )
 
-    # Refit on all development observations, keeping the external test set
-    # untouched until the final evaluation.
+    # Train the evaluation model on development observations only; the
+    # external test set remains untouched until its final evaluation.
     with track_stage("final_model_training_on_development_data"):
         final_model = model_factory(config.model)
         final_model = TrainingPipeline(
             dataset=development_dataset, model=final_model
         ).run()
-        if model_serializer is not None:
-            model_text = model_serializer(final_model)
-            experiment.artifact_store.save_text(
-                "models", artifact_name("model.txt"), model_text
-            )
-            experiment.register_artifact(
-                "models", artifact_name("model.txt"), "text/plain"
-            )
 
     with track_stage("test_evaluation") as test_stage:
         test_result = PredictionPipeline(
@@ -686,6 +727,11 @@ def _run_size_cross_validation(
                 stage_id=test_stage.stage_id,
                 split="test",
             )
+
+    with track_stage("development_training_predictions"):
+        development_predictions = Predictor(final_model).predict(
+            development_dataset
+        )
 
     with track_stage("result_artifact_persistence"):
         experiment.artifact_store.save_text(
@@ -712,6 +758,24 @@ def _run_size_cross_validation(
         experiment.register_artifact(
             "predictions", artifact_name("predictions.csv"), "text/csv"
         )
+        experiment.artifact_store.save_text(
+            "predictions",
+            artifact_name("train_predictions.csv"),
+            _predictions_to_csv(development_predictions),
+        )
+        experiment.register_artifact(
+            "predictions", artifact_name("train_predictions.csv"), "text/csv"
+        )
+        experiment.artifact_store.save_text(
+            "predictions",
+            artifact_name("validation_predictions.csv"),
+            _predictions_to_csv(out_of_fold_predictions),
+        )
+        experiment.register_artifact(
+            "predictions",
+            artifact_name("validation_predictions.csv"),
+            "text/csv",
+        )
         _save_json(
             experiment,
             "evaluation",
@@ -720,15 +784,60 @@ def _run_size_cross_validation(
                 "evaluation_method": config.dataset_split.strategy,
                 "n_splits": n_splits,
                 "folds": fold_records,
+                "train": {
+                    "aggregation": "mean_and_std_across_fold_training_sets",
+                    "fold_mean_metrics": train_means,
+                    "fold_std_metrics": train_deviations,
+                },
+                "validation": {
+                    "aggregation": "out_of_fold_mean_and_std",
+                    "num_samples": len(out_of_fold_predictions),
+                    "fold_mean_metrics": means,
+                    "fold_std_metrics": deviations,
+                },
+                # Keep these aliases for consumers of the previous schema;
+                # they refer to validation-fold aggregates.
                 "mean": means,
                 "std": deviations,
                 "test": {
                     "num_samples": test_result.evaluation.num_samples,
                     "metrics": test_metrics,
                 },
-                "final_model": "refit_on_development_data_after_cross_validation",
+                "final_model": "deployment_model_refit_on_all_data_after_test",
             },
         )
+        for prediction in development_predictions:
+            actual = prediction.true_target
+            experiment.register_prediction(
+                sample_id=(
+                    prediction.sample_id
+                    or f"{prediction.graph_id}:{prediction.subgraph_id}"
+                ),
+                predicted_value=prediction.predicted_target,
+                actual_value=actual,
+                prediction_error=(
+                    prediction.predicted_target - actual
+                    if actual is not None
+                    else None
+                ),
+                split="train",
+            )
+        for prediction in out_of_fold_predictions:
+            actual = prediction.true_target
+            experiment.register_prediction(
+                sample_id=(
+                    prediction.sample_id
+                    or f"{prediction.graph_id}:{prediction.subgraph_id}"
+                ),
+                predicted_value=prediction.predicted_target,
+                actual_value=actual,
+                prediction_error=(
+                    prediction.predicted_target - actual
+                    if actual is not None
+                    else None
+                ),
+                split="validation",
+            )
         for prediction in test_result.predictions:
             actual = prediction.true_target
             error = (
@@ -744,6 +853,37 @@ def _run_size_cross_validation(
                 predicted_value=prediction.predicted_target,
                 actual_value=actual,
                 prediction_error=error,
+                split="test",
+            )
+
+    # Test metrics above are from the model trained only on development data.
+    # The deployment artifact then uses every labeled sample available.
+    with track_stage("deployment_model_training_on_all_data"):
+        deployment_model = model_factory(config.model)
+        deployment_model = TrainingPipeline(
+            dataset=dataset,
+            model=deployment_model,
+        ).run()
+        if model_serializer is not None:
+            model_text = model_serializer(deployment_model)
+            experiment.artifact_store.save_text(
+                "models", artifact_name("model.txt"), model_text
+            )
+            experiment.register_artifact(
+                "models", artifact_name("model.txt"), "text/plain"
+            )
+            _save_json(
+                experiment,
+                "models",
+                artifact_name("model_manifest.json"),
+                {
+                    "model_format": "lightgbm_booster_text",
+                    "model_role": "deployment_refit_after_test_evaluation",
+                    "objective": config.features.objective_name,
+                    "feature_names_in_order": dataset.feature_names,
+                    "training_sample_count": dataset.num_samples,
+                    "target": "tds",
+                },
             )
 
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
@@ -1269,19 +1409,6 @@ def run_experiment(
                         model=model,
                     ).run()
 
-                    if model_serializer is not None:
-                        model_text = model_serializer(trained_model)
-                        experiment.artifact_store.save_text(
-                            "models",
-                            artifact_name("model.txt"),
-                            model_text,
-                        )
-                        experiment.register_artifact(
-                            "models",
-                            artifact_name("model.txt"),
-                            "text/plain",
-                        )
-
                 datasets_by_split = {
                     "train": train_dataset,
                     "validation": validation_dataset,
@@ -1397,21 +1524,35 @@ def run_experiment(
                         },
                     )
 
-                    for prediction in test_result.predictions:
-                        actual = prediction.true_target
-                        error = (
-                            prediction.predicted_target - actual
-                            if actual is not None
-                            else None
+                    for split_name, split_result in results_by_split.items():
+                        for prediction in split_result.predictions:
+                            actual = prediction.true_target
+                            experiment.register_prediction(
+                                sample_id=(
+                                    prediction.sample_id
+                                    or f"{prediction.graph_id}:{prediction.subgraph_id}"
+                                ),
+                                predicted_value=prediction.predicted_target,
+                                actual_value=actual,
+                                prediction_error=(
+                                    prediction.predicted_target - actual
+                                    if actual is not None
+                                    else None
+                                ),
+                                split=split_name,
+                            )
+
+                    for split_name in ("train", "validation"):
+                        split_result = results_by_split[split_name]
+                        experiment.artifact_store.save_text(
+                            "predictions",
+                            artifact_name(f"{split_name}_predictions.csv"),
+                            _predictions_to_csv(split_result.predictions),
                         )
-                        experiment.register_prediction(
-                            sample_id=(
-                                prediction.sample_id
-                                or f"{prediction.graph_id}:{prediction.subgraph_id}"
-                            ),
-                            predicted_value=prediction.predicted_target,
-                            actual_value=actual,
-                            prediction_error=error,
+                        experiment.register_artifact(
+                            "predictions",
+                            artifact_name(f"{split_name}_predictions.csv"),
+                            "text/csv",
                         )
 
                     logger.info(
@@ -1420,6 +1561,35 @@ def run_experiment(
                         predictions_path,
                         metrics_path,
                     )
+
+                # Test metrics above come from the train-only model. Refit the
+                # deployable artifact on all labeled samples after evaluation.
+                with track_stage("deployment_model_training_on_all_data"):
+                    deployment_model = model_factory(config.model)
+                    deployment_model = TrainingPipeline(
+                        dataset=dataset, model=deployment_model
+                    ).run()
+                    if model_serializer is not None:
+                        model_text = model_serializer(deployment_model)
+                        experiment.artifact_store.save_text(
+                            "models", artifact_name("model.txt"), model_text
+                        )
+                        experiment.register_artifact(
+                            "models", artifact_name("model.txt"), "text/plain"
+                        )
+                        _save_json(
+                            experiment,
+                            "models",
+                            artifact_name("model_manifest.json"),
+                            {
+                                "model_format": "lightgbm_booster_text",
+                                "model_role": "deployment_refit_after_test_evaluation",
+                                "objective": config.features.objective_name,
+                                "feature_names_in_order": dataset.feature_names,
+                                "training_sample_count": dataset.num_samples,
+                                "target": "tds",
+                            },
+                        )
 
             return experiment.experiment_id
 
@@ -1943,5 +2113,6 @@ def run_graph_transfer_experiment(
                             if actual is not None
                             else None
                         ),
+                        split="test_unseen_graph",
                     )
     return experiment.experiment_id

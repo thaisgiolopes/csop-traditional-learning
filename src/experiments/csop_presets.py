@@ -18,7 +18,6 @@ SUPPORTED_SUBGRAPH_SIZES = tuple(range(10, 501, 10))
 BASE_FEATURE_NAMES = [
     "num_vertices",
     "num_edges",
-    "subgraph_size",
 ]
 POOLING_NAMES = ("mean", "max", "min", "std")
 AVAILABLE_NODE_FEATURES = (
@@ -56,9 +55,8 @@ def configured_feature_names(
         for pooling in POOLING_NAMES
     ]
     if node_scope == "global":
-        # Global node mappings are emitted with global graph features; the
-        # candidate-local size feature is merged after those mappings.
-        return ["num_vertices", "num_edges", *pooled_names, "subgraph_size"]
+        # DatasetBuilder emits global mappings before candidate-local counts.
+        return [*pooled_names, "num_vertices", "num_edges"]
     return [*BASE_FEATURE_NAMES, *pooled_names]
 
 
@@ -165,8 +163,7 @@ def build_csop_configs(
                     ),
                     features=FeatureConfig(
                         feature_set_id=(
-                            "graph-size-node-structure-"
-                            f"{node_scope}-with-subgraph-size-v1"
+                            f"candidate-structure-{node_scope}-v2"
                         ),
                         feature_names=feature_names.copy(),
                         enabled_features=selected_features.copy(),

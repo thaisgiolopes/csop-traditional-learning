@@ -176,6 +176,7 @@ class ExperimentTracker:
         predicted_value: float,
         actual_value: float | None = None,
         prediction_error: float | None = None,
+        split: str | None = None,
     ) -> PredictionRecord:
         """Register scalar prediction values for one sample."""
         return self._database.register_prediction(
@@ -184,6 +185,7 @@ class ExperimentTracker:
             predicted_value=predicted_value,
             actual_value=actual_value,
             prediction_error=prediction_error,
+            split=split,
         )
 
     def register_evaluation(

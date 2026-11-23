@@ -30,9 +30,9 @@ def test_presets_expose_selected_factors_and_isolated_output_paths(tmp_path):
     for config in configs:
         assert (
             config.features.feature_set_id
-            == "graph-size-node-structure-local-with-subgraph-size-v1"
+            == "candidate-structure-local-v2"
         )
-        assert "subgraph_size" in config.features.feature_names
+        assert "subgraph_size" not in config.features.feature_names
         assert config.subgraph_generation.sample_count == 20
         assert config.subgraph_generation.seed == 17
         assert config.random_seed == 17
@@ -57,8 +57,6 @@ def test_global_feature_preset_matches_runner_column_order():
     )[0]
 
     assert config.features.feature_names == [
-        "num_vertices",
-        "num_edges",
         "degree_mean",
         "degree_max",
         "degree_min",
@@ -75,7 +73,8 @@ def test_global_feature_preset_matches_runner_column_order():
         "average_neighbor_degree_global_max",
         "average_neighbor_degree_global_min",
         "average_neighbor_degree_global_std",
-        "subgraph_size",
+        "num_vertices",
+        "num_edges",
     ]
 
 
@@ -205,7 +204,7 @@ def test_cli_can_use_global_node_features_or_disable_them(monkeypatch):
     )
     assert captured[0].features.enabled_features == []
     assert captured[0].features.feature_names == [
-        "num_vertices", "num_edges", "subgraph_size"
+        "num_vertices", "num_edges"
     ]
 
 
@@ -214,10 +213,10 @@ def test_selected_node_features_match_runner_output_schema():
         "graph-size-node-structure-local-with-subgraph-size-v1",
         enabled_features=["pagerank", "triangle_count"],
     )
-    generated_names = [feature.name for feature in engine.features[:3]]
+    generated_names = [feature.name for feature in engine.features[:2]]
     generated_names.extend(
         f"{feature.name}_{strategy.name}"
-        for feature in engine.features[3:]
+        for feature in engine.features[2:]
         for strategy in pooling[feature.name]
     )
     config = build_csop_configs(
@@ -244,6 +243,7 @@ def test_time_series_size_validation_requires_equal_spacing_and_more_sizes_than_
             "--graph", "amazon",
             "--size", "10", "--size", "20", "--size", "30",
             "--size", "40", "--size", "50", "--size", "60",
+            "--size", "70",
             "--samples", "20",
             "--split-strategy", "time_series_size",
             "--folds", "5",
@@ -251,7 +251,7 @@ def test_time_series_size_validation_requires_equal_spacing_and_more_sizes_than_
     ) == 0
     output = capsys.readouterr().out
     assert "split=time_series_size({'n_splits': 5})" in output
-    assert "6 experiment configuration(s) validated" in output
+    assert "7 experiment configuration(s) validated" in output
 
 
 def test_transfer_validation_reads_metadata_without_running_experiment(

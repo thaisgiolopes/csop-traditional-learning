@@ -62,7 +62,7 @@ def test_num_vertices_feature_name():
     feature = NumVerticesFeature()
 
     assert feature.name == "num_vertices"
-    assert feature.scope is FeatureScope.GLOBAL
+    assert feature.scope is FeatureScope.LOCAL
     assert feature.level is FeatureLevel.GRAPH
 
 
@@ -73,7 +73,7 @@ def test_num_vertices_feature_compute():
 
     result = feature.compute(context)
 
-    assert result == 4
+    assert result == 3
 
 
 def test_num_edges_feature_name():
@@ -81,7 +81,7 @@ def test_num_edges_feature_name():
     feature = NumEdgesFeature()
 
     assert feature.name == "num_edges"
-    assert feature.scope is FeatureScope.GLOBAL
+    assert feature.scope is FeatureScope.LOCAL
     assert feature.level is FeatureLevel.GRAPH
 
 
@@ -92,7 +92,7 @@ def test_num_edges_feature_compute():
 
     result = feature.compute(context)
 
-    assert result == 4
+    assert result == 2
 
 
 def test_subgraph_size_feature_uses_candidate_vertices():

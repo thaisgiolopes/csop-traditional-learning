@@ -265,10 +265,10 @@ Node-level and edge-level features can be converted into fixed-size feature vect
 
 The current integration experiment uses the following features.
 
-### Global graph-level features
+### Local graph-level features
 
-- `num_vertices`: number of vertices in the input graph;
-- `num_edges`: number of edges in the input graph.
+- `num_vertices`: number of vertices in the candidate subgraph;
+- `num_edges`: number of edges in the candidate subgraph.
 
 ### Local node-level feature
 
@@ -294,7 +294,10 @@ degree_min
 degree_std
 ```
 
-Global feature values are cached by `FeatureEngine` and reused across candidate subgraphs from the same input graph.
+The input graph's total vertex and edge counts remain in graph metadata and
+reports, but they are not model inputs. `subgraph_size` is derived from the
+candidate vertex count and used to group temporal folds; it is not duplicated
+as a second model feature.
 
 ---
 
@@ -379,8 +382,8 @@ Sample(
     graph_id="graph_001",
     subgraph_id=3,
     features={
-        "num_vertices": 100,
-        "num_edges": 250,
+        "num_vertices": 5,
+        "num_edges": 6,
         "degree_mean": 5.4,
         "degree_max": 9.0,
         "degree_min": 1.0,
@@ -420,8 +423,8 @@ graph_id,subgraph_id,num_vertices,num_edges,degree_mean,degree_max,degree_min,de
 Example:
 
 ```text
-integration_test_graph,0,5,6,1.0,1.0,1.0,0.0,0.0
-integration_test_graph,1,5,6,2.0,2.0,2.0,0.0,0.3333333333333333
+integration_test_graph,0,3,2,1.3333333333333333,2.0,1.0,0.4714045207910317,0.0
+integration_test_graph,1,4,4,2.0,3.0,1.0,0.7071067811865476,0.25
 ```
 
 The `DatasetLoader` reconstructs `Sample` objects from the CSV without loading the original graph or recalculating features.
@@ -665,7 +668,7 @@ tests/
 
 ## Controlled Graph Experiments
 
-`experiments.run_csop_experiments` builds configurations from the existing CSOP presets. It supports Amazon, CiteSeer, and Patents, target sizes from 10 through 500 vertices in steps of 10, configurable candidate counts and seeds, and LightGBM settings. For a selected graph, all selected sizes form one experiment: candidate datasets are combined, a stratified 20% final test set is held out, and five-fold cross-validation runs on the remaining 80%. Fold metrics (including R²) are calculated on each fold's validation partition. A final model is fit on the full 80% development set and evaluated once on the untouched test set. `--test-ratio` changes the held-out fraction. `--split-strategy random` runs a random train/validation/test split, with `--validation-size` controlling validation within the development portion. `--split-strategy time_series_size` uses forward folds over ordered, equally spaced development sizes, so each validation fold contains larger sizes than its training fold. The `subgraph_size` feature identifies each candidate's size. `list` and `validate` do not run experiments.
+`experiments.run_csop_experiments` builds configurations from the existing CSOP presets. It supports Amazon, CiteSeer, and Patents, target sizes from 10 through 500 vertices in steps of 10, configurable candidate counts and seeds, and LightGBM settings. For a selected graph, all selected sizes form one experiment. Random splitting uses random holdouts, `stratified_kfold` uses a stratified 20% final test set, and `time_series_size` reserves the latest size groups as its final test set before running forward folds on earlier development sizes. Each fold records training and validation metrics, then the selected development model is evaluated once on the untouched test set. After recording those metrics, the deployable model is refit on the complete labeled dataset. The workbook records train, validation, and test predictions with their split labels. `--test-ratio` changes the held-out fraction. `--split-strategy random` runs a random train/validation/test split, with `--validation-size` controlling validation within the development portion. Candidate size is fold-grouping metadata, not a duplicate feature. `list` and `validate` do not run experiments.
 
 Run the 20-sample size-10 pilot for both datasets:
 

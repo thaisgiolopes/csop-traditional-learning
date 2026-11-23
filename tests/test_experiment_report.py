@@ -6,7 +6,7 @@ import pytest
 from src.experiments.artifact_store import ArtifactStore
 from src.experiments.database import ExperimentDatabase
 from src.experiments.report import ExperimentReport, SUMMARY_COLUMNS
-from openpyxl import load_workbook
+from openpyxl import Workbook, load_workbook
 
 
 def test_update_xlsx_upserts_only_requested_experiment(
@@ -65,6 +65,42 @@ def test_update_xlsx_writes_stage_artifact_prediction_and_metric_sheets(
     assert workbook["Predictions"].max_row == 2
     assert workbook["Evaluations"].max_row == 2
     workbook.close()
+
+
+def test_update_xlsx_migrates_legacy_predictions_sheet_and_keeps_rows(
+    database,
+    tmp_path,
+):
+    add_experiment(database, tmp_path, "EXP_001")
+    database.register_prediction(
+        "EXP_001", "sample-train", 0.75, 0.8, -0.05, split="train"
+    )
+    report_path = tmp_path / "reports" / "legacy.xlsx"
+    report_path.parent.mkdir(parents=True)
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Predictions"
+    sheet.append(
+        [
+            "experiment_id", "prediction_id", "sample_id",
+            "predicted_value", "actual_value", "prediction_error",
+        ]
+    )
+    sheet.append(["EXP_OLD", 12, "sample-old", 0.4, 0.5, -0.1])
+    workbook.save(report_path)
+    workbook.close()
+
+    ExperimentReport(database).update_xlsx(report_path, "EXP_001")
+
+    workbook = load_workbook(report_path, read_only=True, data_only=True)
+    rows = list(workbook["Predictions"].values)
+    workbook.close()
+    assert rows[0] == (
+        "experiment_id", "prediction_id", "sample_id", "split",
+        "predicted_value", "actual_value", "prediction_error",
+    )
+    assert rows[1] == ("EXP_OLD", 12, "sample-old", None, 0.4, 0.5, -0.1)
+    assert rows[2][0:4] == ("EXP_001", 1, "sample-train", "train")
 
 
 def test_xlsx_contains_effective_configuration_and_split_metrics(

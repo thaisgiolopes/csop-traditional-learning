@@ -281,8 +281,6 @@ def test_grouped_sizes_train_one_shared_model_and_persist_size_metrics(tmp_path)
             "graph-size-node-structure-global-with-subgraph-size-v1"
         )
         config.features.feature_names = [
-            "num_vertices",
-            "num_edges",
             "degree_mean",
             "degree_max",
             "degree_min",
@@ -291,7 +289,8 @@ def test_grouped_sizes_train_one_shared_model_and_persist_size_metrics(tmp_path)
             "pagerank_global_max",
             "pagerank_global_min",
             "pagerank_global_std",
-            "subgraph_size",
+            "num_vertices",
+            "num_edges",
         ]
         config.features.enabled_features = ["degree", "pagerank"]
         config.dataset_split = DatasetSplitConfig(
@@ -331,10 +330,11 @@ def test_grouped_sizes_train_one_shared_model_and_persist_size_metrics(tmp_path)
         assert len(database.get_experiment_samples(experiment_id)) == 2 * SAMPLE_COUNT
 
         metrics = database.get_experiment_metrics(experiment_id)
-        assert len(metrics) == 18
+        assert len(metrics) == 33
         assert {metric.split for metric in metrics} == {
-            *(f"fold_{fold}" for fold in range(1, 5)),
-            "cv_mean", "cv_std",
+            *(f"fold_{fold}_{split}" for fold in range(1, 5)
+              for split in ("train", "validation")),
+            "cv_mean", "cv_std", "test",
         }
         stages = database.get_experiment_stages(experiment_id)
         assert all(stage.status == "completed" for stage in stages)
@@ -348,10 +348,14 @@ def test_grouped_sizes_train_one_shared_model_and_persist_size_metrics(tmp_path)
             for stage in stages
         )
         assert any(
-            stage.stage_name == "final_model_training_on_all_samples"
+            stage.stage_name == "final_model_training_on_development_data"
             for stage in stages
         )
-    assert model_factory_calls == ["lightgbm"] * 5
+        assert any(
+            stage.stage_name == "deployment_model_training_on_all_data"
+            for stage in stages
+        )
+    assert model_factory_calls == ["lightgbm"] * 6
 
     batch_config = json.loads(
         (experiment_root / "config" / "batch_config.json").read_text(
@@ -376,7 +380,7 @@ def test_grouped_sizes_train_one_shared_model_and_persist_size_metrics(tmp_path)
     )
     assert len(combined_rows) == 2 * SAMPLE_COUNT
     assert sum(
-        int(row["subgraph_size"]) == 3 for row in combined_rows
+        sample_sizes[row["sample_id"]] == 3 for row in combined_rows
     ) == SAMPLE_COUNT
     split_metadata = json.loads(
         (experiment_root / "datasets" / "split_metadata.json").read_text(
@@ -386,13 +390,13 @@ def test_grouped_sizes_train_one_shared_model_and_persist_size_metrics(tmp_path)
     assert split_metadata["strategy"] == "stratified_kfold"
     assert len(split_metadata["folds"]) == 4
     for fold in split_metadata["folds"]:
-        assert fold["train_sample_count"] + fold["test_sample_count"] == (
-            2 * SAMPLE_COUNT
+        assert fold["train_sample_count"] + fold["validation_sample_count"] == (
+            split_metadata["development_sample_count"]
         )
         assert set(fold["train_size_distribution"]) == {"3", "4"}
-        assert set(fold["test_size_distribution"]) == {"3", "4"}
-        assert sum(fold["test_size_distribution"].values()) == (
-            fold["test_sample_count"]
+        assert set(fold["validation_size_distribution"]) == {"3", "4"}
+        assert sum(fold["validation_size_distribution"].values()) == (
+            fold["validation_sample_count"]
         )
     metrics_json = json.loads(
         (experiment_root / "evaluation" / "metrics.json").read_text(
@@ -402,14 +406,25 @@ def test_grouped_sizes_train_one_shared_model_and_persist_size_metrics(tmp_path)
     assert metrics_json["evaluation_method"] == "stratified_kfold"
     assert len(metrics_json["folds"]) == 4
     expected_mean_r2 = sum(
-        fold["metrics"]["r2"] for fold in metrics_json["folds"]
+        fold["validation"]["metrics"]["r2"]
+        for fold in metrics_json["folds"]
     ) / 4
     assert metrics_json["mean"]["r2"] == pytest.approx(expected_mean_r2)
-    with (experiment_root / "predictions" / "predictions.csv").open(
+    assert metrics_json["validation"]["fold_mean_metrics"]["r2"] == pytest.approx(
+        expected_mean_r2
+    )
+    assert metrics_json["train"]["fold_mean_metrics"]
+    assert metrics_json["test"]["metrics"]
+    with (experiment_root / "predictions" / "cv_predictions.csv").open(
         newline="", encoding="utf-8"
     ) as handle:
         out_of_fold_predictions = list(csv.DictReader(handle))
-    assert len(out_of_fold_predictions) == 2 * SAMPLE_COUNT
+    assert len(out_of_fold_predictions) == split_metadata["development_sample_count"]
+    with (experiment_root / "predictions" / "predictions.csv").open(
+        newline="", encoding="utf-8"
+    ) as handle:
+        final_test_predictions = list(csv.DictReader(handle))
+    assert len(final_test_predictions) == split_metadata["test_sample_count"]
     assert (experiment_root / "models" / "model.txt").is_file()
     assert (experiment_root / "predictions" / "predictions.csv").is_file()
     report_path = root / "reports" / "experiments.xlsx"
@@ -437,7 +452,7 @@ def test_time_series_size_generalization_never_trains_on_larger_sizes(tmp_path):
             "graph-size-node-structure-local-with-subgraph-size-v1"
         )
         config.features.feature_names = [
-            "num_vertices", "num_edges", "subgraph_size",
+            "num_vertices", "num_edges",
             "degree_mean", "degree_max", "degree_min", "degree_std",
         ]
         config.features.enabled_features = ["degree"]
@@ -472,18 +487,25 @@ def test_time_series_size_generalization_never_trains_on_larger_sizes(tmp_path):
     assert len(split_metadata["folds"]) == 2
     for fold in split_metadata["folds"]:
         train_sizes = [int(value) for value in fold["train_size_distribution"]]
-        test_sizes = [int(value) for value in fold["test_size_distribution"]]
-        assert max(train_sizes) < min(test_sizes)
+        validation_sizes = [
+            int(value) for value in fold["validation_size_distribution"]
+        ]
+        assert max(train_sizes) < min(validation_sizes)
+    assert split_metadata["test_size_distribution"] == {"5": 12}
     metrics = json.loads(
         (experiment_root / "evaluation" / "metrics.json").read_text(
             encoding="utf-8"
         )
     )
     assert metrics["evaluation_method"] == "time_series_size"
-    assert [fold["metrics"]["r2"] for fold in metrics["folds"]]
+    assert [fold["validation"]["metrics"]["r2"] for fold in metrics["folds"]]
     assert metrics["mean"]["r2"] == pytest.approx(
-        sum(fold["metrics"]["r2"] for fold in metrics["folds"]) / 2
+        sum(
+            fold["validation"]["metrics"]["r2"] for fold in metrics["folds"]
+        ) / 2
     )
+    assert metrics["train"]["fold_mean_metrics"]
+    assert metrics["test"]["num_samples"] == 12
 
 
 def test_graph_transfer_trains_only_on_source_and_tests_unseen_graph(tmp_path):
@@ -508,7 +530,7 @@ def test_graph_transfer_trains_only_on_source_and_tests_unseen_graph(tmp_path):
                 "graph-size-node-structure-local-with-subgraph-size-v1"
             )
             config.features.feature_names = [
-                "num_vertices", "num_edges", "subgraph_size",
+                "num_vertices", "num_edges",
                 "degree_mean", "degree_max", "degree_min", "degree_std",
             ]
             config.features.enabled_features = ["degree"]
