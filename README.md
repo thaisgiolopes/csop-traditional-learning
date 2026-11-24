@@ -104,6 +104,8 @@ The main dependencies include:
 - pandas and NumPy for tabular data processing;
 - scikit-learn for regression metrics;
 - LightGBM for model training;
+- ONNXMLTools for converting LightGBM models to ONNX and ONNX Runtime for
+  model validation and deployment;
 - PyTorch Geometric for future graph-learning experiments;
 - pytest for automated testing.
 
@@ -669,6 +671,25 @@ tests/
 ## Controlled Graph Experiments
 
 `experiments.run_csop_experiments` builds configurations from the existing CSOP presets. It supports Amazon, CiteSeer, and Patents, target sizes from 10 through 500 vertices in steps of 10, configurable candidate counts and seeds, and LightGBM settings. For a selected graph, all selected sizes form one experiment. Random splitting uses random holdouts, `stratified_kfold` uses a stratified 20% final test set, and `time_series_size` reserves the latest size groups as its final test set before running forward folds on earlier development sizes. Each fold records training and validation metrics, then the selected development model is evaluated once on the untouched test set. After recording those metrics, the deployable model is refit on the complete labeled dataset. The workbook records train, validation, and test predictions with their split labels. `--test-ratio` changes the held-out fraction. `--split-strategy random` runs a random train/validation/test split, with `--validation-size` controlling validation within the development portion. Candidate size is fold-grouping metadata, not a duplicate feature. `list` and `validate` do not run experiments.
+
+### Building a shareable ONNX model
+
+For a deployment model from an existing candidate run, use the focused model
+builder. It selects LightGBM hyperparameters on forward folds, evaluates on
+the largest size groups, then refits on all available labels before export:
+
+```bash
+python -m experiments.export_tds_model \
+  --experiment-root experiments/runs/EXP_20261111_307605b45817 \
+  --output-dir models/tds-amazon-onnx \
+  --trials 30 --folds 5 --test-ratio 0.2 --seed 42
+```
+
+The output directory contains `model.onnx`, the native LightGBM model,
+`model_manifest.json`, and evaluation metrics. The sibling ZIP file is the
+shareable package for inference. Its manifest defines the six-column `float32`
+input order; use it as-is in the search pipeline and do not calculate the TDS
+target while scoring candidates.
 
 Run the 20-sample size-10 pilot for both datasets:
 

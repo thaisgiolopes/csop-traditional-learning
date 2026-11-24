@@ -6,3 +6,6 @@ networkx
 torch_geometric
 pytest
 openpyxl
+onnx
+onnxmltools
+onnxruntime
