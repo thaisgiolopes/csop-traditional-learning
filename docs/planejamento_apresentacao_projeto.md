@@ -1,8 +1,8 @@
 # Planejamento da apresentação do projeto
 
-**Duração prevista:** 25 minutos, com possibilidade de expansão até 30 minutos  
+**Duração prevista:** 25–30 minutos  
 **Público:** orientação do projeto e docente com experiência em aprendizado de máquina  
-**Experimento de referência:** `EXP_20261111_307605b45817`
+**Experimentos de referência:** execuções de Amazon, Patents e transferência Amazon → Patents documentadas na seção 8.
 
 ## Objetivo da apresentação
 
@@ -12,18 +12,19 @@ Apresentar o problema investigado, a formulação da tarefa supervisionada, o pi
 
 | Seção | Tempo |
 |---|---:|
-| 1. Problema e motivação | 2 min |
+| 1. Problema, motivação e objetivo de ML | 2 min |
 | 2. Formulação do CSOP e função objetivo | 3 min |
-| 3. Dados e geração dos candidatos | 2 min |
-| 4. Representação e atributos | 3 min |
-| 5. Pipeline experimental | 2 min |
-| 6. Protocolo de avaliação e caracterização dos splits | 5 min |
-| 7. Modelo e hiperparâmetros | 3 min |
-| 8. Resultados | 3 min |
-| 9. Limitações, questões de ML e próximos passos | 2 min |
-| **Total** | **25 min** |
+| 3. Dados e geração de candidatos | 2 min |
+| 4. Pipeline e construção do conjunto tabular | 2 min |
+| 5. Atributos: definição e justificativa | 3 min |
+| 6. Modelo, velocidade e hiperparâmetros | 4 min |
+| 7. Desenho experimental e caracterização dos splits | 5 min |
+| 8. Experimentos representativos | 3 min |
+| 9. Resultados e interpretações | 5 min |
+| 10. Questões metodológicas e próximos passos | 3 min |
+| **Total** | **30 min** |
 
-Para uma versão de 30 minutos, reservar cinco minutos adicionais para discussão das perguntas metodológicas da seção 9.
+Para uma versão de 20 minutos, encurtar a descrição do grafo e dos hiperparâmetros e apresentar somente as métricas médias e as diferenças principais entre protocolos. Para 30 minutos, reservar tempo para discutir as perguntas de ML da seção 10.
 
 ---
 
@@ -63,10 +64,10 @@ O modelo prediz o valor de TDS; ele não substitui o algoritmo de busca nem, nes
 
 ## 3. Dados e geração dos candidatos — 2 min
 
-### Conteúdo do experimento de referência
+### Conteúdo dos experimentos representativos
 
-- Grafo de origem: Amazon.
-- Tamanho do grafo: 334.863 vértices e 925.872 arestas.
+- Grafos de origem: Amazon e Patents.
+- Amazon: 334.863 vértices e 925.872 arestas.
 - Geração de subgrafos conexos com tamanho exato por expansão conectada.
 - Tamanhos avaliados: 10 a 500 vértices, em incrementos de 10 (50 tamanhos).
 - Candidatos por tamanho: 100.
@@ -79,12 +80,13 @@ As 5.000 amostras são subgrafos candidatos derivados de um único grafo de orig
 
 ## 4. Representação e atributos — 3 min
 
-### Atributos usados
+### Atributos usados e justificativa
 
 | Atributo | Interpretação |
 |---|---|
-| `num_vertices` | Número de vértices do subgrafo candidato |
-| `num_edges` | Número de arestas do subgrafo candidato |
+| `num_vertices` | Número de vértices do grafo de entrada; contextualiza a escala do grafo |
+| `num_edges` | Número de arestas do grafo de entrada; contextualiza a densidade/escala da rede |
+| `subgraph_size` | Número de vértices do candidato; informa diretamente o tamanho ao modelo |
 | `degree_mean` | Média dos graus dos vértices do candidato |
 | `degree_max` | Maior grau no candidato |
 | `degree_min` | Menor grau no candidato |
@@ -92,24 +94,35 @@ As 5.000 amostras são subgrafos candidatos derivados de um único grafo de orig
 
 As estatísticas de grau são obtidas calculando os graus locais e agregando-os por média, máximo, mínimo e desvio-padrão.
 
+### Razão para incluir cada grupo de atributos
+
+- `num_vertices` e `num_edges`: contextualizam o candidato em relação ao grafo completo. São relevantes quando se comparam grafos de escalas diferentes, como Amazon e Patents. Em um experimento feito em apenas um grafo, são constantes e não ajudam a distinguir candidatos; essa redundância deve ser considerada na análise.
+- `subgraph_size`: tamanho do candidato. A função objetivo divide pelo número de vértices, e a estrutura observada pode mudar com o tamanho; fornecer essa variável ajuda o modelo a condicionar a previsão ao tamanho.
+- `degree_mean`: resumo da conectividade média local; é uma estatística simples e barata de calcular.
+- `degree_max` e `degree_min`: capturam extremos que a média pode esconder, por exemplo, a presença de hubs ou vértices pouco conectados.
+- `degree_std`: mede heterogeneidade da conectividade dentro do candidato.
+- Em conjunto, as estatísticas de grau oferecem uma representação tabular compacta de estrutura local. São um primeiro conjunto interpretável, não uma representação completa de toda a topologia.
+
 ### Pontos para contextualizar
 
-- As contagens do grafo de origem ficam nos metadados; não são atributos do modelo.
-- O tamanho do candidato é a própria feature `num_vertices` e também define a ordem dos folds; não é repetido como `subgraph_size`.
+- O vetor contém sete colunas numéricas. `num_vertices` e `num_edges` referem-se ao grafo completo; `subgraph_size` refere-se ao candidato.
+- `subgraph_size` é também a chave usada para ordenar os folds do experimento `time_series_size`.
 - A contribuição dos atributos ainda não foi estudada por importância de variáveis ou ablação.
 
 ## 5. Pipeline experimental — 2 min
 
 Apresentar o fluxo de processamento:
 
-1. Carregamento do grafo Amazon.
+1. Carregamento do grafo de origem (Amazon ou Patents).
 2. Geração de candidatos conexos nos tamanhos especificados.
 3. Extração de atributos globais e locais.
 4. Agregação das estatísticas de grau.
 5. Cálculo direto da TDS para compor o alvo.
 6. Construção e persistência do conjunto tabular.
 7. Separação em desenvolvimento e teste.
-8. Treinamento, validação cruzada, ajuste final e cálculo das métricas.
+8. Treinamento e validação conforme o protocolo escolhido.
+9. Ajuste do modelo final nos dados permitidos pelo protocolo e avaliação no teste reservado.
+10. Persistência de configuração, metadados de split, previsões e métricas para rastreabilidade.
 
 ### Recurso visual sugerido
 
@@ -123,6 +136,10 @@ Fluxograma horizontal com uma etapa por bloco; destacar que a TDS calculada é o
 - O holdout foi estratificado por tamanho: 20 candidatos de cada um dos 50 tamanhos.
 - Os 4.000 candidatos restantes formam o conjunto de desenvolvimento.
 - A semente de split é 42.
+
+### Split aleatório em três partições
+
+Nos experimentos `random`, o protocolo é treino/validação/teste, aproximadamente 60%/20%/20% do total. O teste externo usa 20%. Dos 80% restantes, 25% são destinados à validação (20% do total) e 75% ao treino (60% do total). Essa avaliação mede desempenho em candidatos aleatórios, com os tamanhos representados nas partições; não mede extrapolação para tamanhos inteiramente inéditos.
 
 ### Validação cruzada progressiva por tamanho
 
@@ -152,11 +169,13 @@ A validação cruzada mede desempenho em blocos de tamanhos maiores que os visto
 - as métricas do teste final descrevem desempenho em novos candidatos amostrados dentro da distribuição de tamanhos representada no desenvolvimento;
 - o R² do teste final não deve ser apresentado como evidência isolada de extrapolação para tamanhos inéditos.
 
+O `TimeSeriesSplit` do projeto cria folds de treino e validação em ordem crescente de tamanho. A opção `test_ratio=0.2` reserva adicionalmente o conjunto chamado `test` por amostragem estratificada em todos os tamanhos. Assim, há treino, validação progressiva e teste final, mas o teste final não é uma faixa cronologicamente posterior de tamanhos. A apresentação deve deixar essa distinção explícita.
+
 ### Recurso visual sugerido
 
 Uma linha de tamanhos de 10 a 500, com cores distintas para treino e validação em cada fold. Mostrar o teste final em um painel separado como amostragem estratificada nos 50 tamanhos.
 
-## 7. Modelo e hiperparâmetros — 3 min
+## 7. Modelo, foco tabular, velocidade e hiperparâmetros — 4 min
 
 ### Modelo
 
@@ -166,7 +185,11 @@ Uma linha de tamanhos de 10 a 500, com cores distintas para treino e validação
 
 ### Justificativa atual
 
-LightGBM foi adotado como primeiro modelo por ser apropriado para dados tabulares, captar relações não lineares e interações entre atributos, e exigir pouco pré-processamento. A escolha ainda é exploratória: não houve comparação sistemática com outros modelos nem busca de hiperparâmetros.
+O projeto pretende investigar primeiro modelos tabulares, que recebem estatísticas compactas calculadas para cada candidato. LightGBM foi adotado como primeiro modelo por ser apropriado para dados tabulares, captar relações não lineares e interações entre atributos, e exigir pouco pré-processamento. A escolha ainda é exploratória: não houve comparação sistemática com outros modelos nem busca de hiperparâmetros.
+
+Não começamos com uma GNN porque a pergunta experimental atual é se atributos tabulares simples conseguem prever a TDS com custo baixo, e não aprender diretamente uma representação completa do grafo. Uma GNN é uma direção possível de comparação futura, especialmente se as estatísticas agregadas perderem informação topológica importante. Essa escolha é de escopo, não uma afirmação de que GNNs sejam inadequadas.
+
+O custo também faz parte do objetivo de aplicação: se a extração de atributos e a inferência forem tão lentas quanto calcular diretamente a TDS, o modelo pode não trazer benefício no processo de busca. Ainda não há medição comparativa de tempo nos experimentos apresentados. Devem ser medidos separadamente o custo de geração/extração, o custo de calcular TDS, o tempo de treinamento e a latência de previsão, por candidato e em lote.
 
 ### Hiperparâmetros registrados
 
@@ -176,47 +199,96 @@ LightGBM foi adotado como primeiro modelo por ser apropriado para dados tabulare
 | `learning_rate` | 0,05 |
 | `num_leaves` | 31 |
 | `min_child_samples` | 20 |
-| `n_jobs` | 1 |
+| `n_jobs` | 1 (8 no graph transfer) |
 | `random_state` | 42 |
 | `verbosity` | -1 |
 
+### Interpretação dos hiperparâmetros
+
+- `n_estimators=100`: número de árvores/etapas de boosting. Define parte do custo e da capacidade do conjunto; valor inicial, não selecionado por busca.
+- `learning_rate=0.05`: controla a contribuição de cada árvore. Uma taxa menor costuma exigir mais árvores; o valor é um compromisso inicial entre aprendizado gradual e custo.
+- `num_leaves=31`: controla a capacidade das árvores. Mais folhas podem capturar relações detalhadas, mas também aumentam complexidade, custo e risco de sobreajuste.
+- `min_child_samples=20`: exige um mínimo de amostras em cada folha e regulariza regras baseadas em poucos candidatos.
+- `n_jobs=1` nos experimentos locais e `n_jobs=8` no graph transfer: define o paralelismo de treino. Como a configuração não foi calibrada por benchmark de latência, apresentar essa diferença e propor comparação controlada do tempo com o mesmo hardware e número de threads.
+- `random_state=42`: fixa a semente para facilitar reprodutibilidade.
+- `verbosity=-1`: reduz mensagens de log e não altera a qualidade do modelo.
+
+Os valores devem ser apresentados como configuração de baseline. Não foram afinados por busca sistemática nem escolhidos após comparação de grades de parâmetros.
+
 ### Questão metodológica para destacar
 
-Árvores de decisão particionam o espaço de atributos em regiões e, em geral, não extrapolam tendências numéricas além dos valores vistos no treino da mesma forma que modelos lineares. Como a validação progressiva usa valores de `num_vertices` maiores que os tamanhos de treino, esse comportamento deve ser analisado por fold e comparado com alternativas.
+Árvores de decisão particionam o espaço de atributos em regiões e, em geral, não extrapolam tendências numéricas além dos valores vistos no treino da mesma forma que modelos lineares. Como a validação progressiva usa valores de `subgraph_size` maiores que os tamanhos de treino, esse comportamento deve ser analisado por fold e comparado com alternativas.
 
-## 8. Resultados — 3 min
+## 8. Experimentos representativos — 3 min
 
-### Validação cruzada
+Apresentar cinco execuções já registradas no repositório, cobrindo os principais regimes de avaliação.
 
-| Fold | MAE | RMSE | R² |
-|---|---:|---:|---:|
-| 1 | 0,111 | 0,194 | 0,835 |
-| 2 | 0,073 | 0,105 | 0,940 |
-| 3 | 0,063 | 0,096 | 0,938 |
-| 4 | 0,056 | 0,079 | 0,934 |
-| 5 | 0,052 | 0,070 | 0,934 |
-| **Média** | **0,071** | **0,109** | **0,916** |
+| Regime | Grafo(s) | Execução | Uso na apresentação |
+|---|---|---|---|
+| Random, treino/validação/teste | Amazon | `EXP_20261021_88cae057a82d` | Referência de desempenho com divisão aleatória |
+| Random, treino/validação/teste | Patents | `EXP_20261112_70f000f9ad58` | Contraste entre grafos sob o mesmo regime geral |
+| Progressivo por tamanho, CV + teste | Amazon | `EXP_20261111_307605b45817` | Generalização para blocos de tamanhos maiores |
+| Progressivo por tamanho, CV + teste | Patents | `EXP_20261113_8990d8ddf6e9` | Repetição da pergunta de generalização no segundo grafo |
+| Transferência entre grafos | Amazon → Patents | `EXP_20261104_183446919fe2` | Teste de mudança de grafo/domínio |
 
-Desvios-padrão entre folds: MAE = 0,021; RMSE = 0,044; R² = 0,041.
+### Interpretação dos regimes
 
-### Teste final estratificado
+- **Random:** divide candidatos aleatoriamente em treino, validação e teste. É uma referência de desempenho em candidatos novos dentro da mistura de tamanhos amostrada; não mede extrapolação para tamanhos inéditos.
+- **Progressivo por tamanho:** os folds de treino e validação respeitam a ordem dos tamanhos e validam em blocos maiores que o treino de cada fold. O teste final é amostrado estratificadamente em todos os tamanhos, então não é uma faixa futura isolada.
+- **Graph transfer:** treina em Amazon e testa em Patents. Os dois conjuntos têm candidatos nos tamanhos 10–500, 100 por tamanho. A avaliação externa contém 5.000 candidatos Patents.
 
-| Métrica | Resultado |
-|---|---:|
-| MAE | 0,061 |
-| RMSE | 0,098 |
-| R² | 0,942 |
-| Número de amostras | 1.000 |
+Não comparar diretamente MAE/RMSE de grafos diferentes sem considerar escala e distribuição de TDS. R² também depende da variância do alvo. Apresentar distribuição do alvo e baselines por grafo para contextualizar.
+
+## 9. Resultados e interpretações — 5 min
+
+### Resumo dos resultados principais
+
+| Regime | Grafo / direção | MAE | RMSE | R² | N de avaliação |
+|---|---|---:|---:|---:|---:|
+| Random, teste | Amazon | 0,062 | 0,096 | 0,940 | 1.000 |
+| Random, teste | Patents | 0,025 | 0,037 | 0,816 | 1.000 |
+| CV progressiva, média dos folds | Amazon | 0,071 | 0,109 | 0,916 | 3.200 previsões OOF |
+| Teste estratificado | Amazon | 0,061 | 0,098 | 0,942 | 1.000 |
+| CV progressiva, média dos folds | Patents | 0,029 | 0,043 | 0,679 | 3.200 previsões OOF |
+| Teste estratificado | Patents | 0,024 | 0,033 | 0,845 | 1.000 |
+| Graph transfer | Amazon → Patents | 0,131 | 0,160 | -2,616 | 5.000 |
+
+Validação dos splits random: Amazon MAE 0,066, RMSE 0,112, R² 0,932; Patents MAE 0,026, RMSE 0,039, R² 0,803. O teste permanece fora das decisões de ajuste.
+
+### Interpretação possível
+
+- No split random, Amazon tem R² maior, enquanto Patents tem erros absolutos menores. Isso não significa automaticamente que Patents seja mais fácil: os alvos podem ter escalas e variâncias diferentes.
+- Na CV progressiva, Amazon mantém R² médio alto (0,916); Patents tem R² médio menor (0,679), apesar de MAE/RMSE absolutos menores. Uma possível explicação é que a TDS em Patents tenha menor variância, mas a distribuição precisa ser examinada antes de concluir.
+- Em ambos os grafos, o R² médio da CV progressiva é inferior ao do teste estratificado. Os protocolos respondem a perguntas diferentes: a CV avança para tamanhos maiores, enquanto o teste contém tamanhos já representados no desenvolvimento.
+- A transferência Amazon → Patents tem R² negativo (-2,616), o que indica desempenho inferior a prever a média do alvo no conjunto Patents. O aumento dos erros sugere que a transferência entre estes grafos é difícil com esta representação. Mudança de distribuição é uma hipótese a investigar, não uma causa já demonstrada.
+- O resultado de transferência vale para uma direção específica, Amazon → Patents; não generalizar a todos os pares de grafos.
+
+### R² por fold nos splits progressivos
+
+| Fold | Amazon R² | Patents R² |
+|---|---:|---:|
+| 1 | 0,835 | 0,579 |
+| 2 | 0,940 | 0,555 |
+| 3 | 0,938 | 0,711 |
+| 4 | 0,934 | 0,753 |
+| 5 | 0,934 | 0,796 |
+
+O MAE cai ao longo dos folds e o R² de Patents melhora nos folds finais. Isso pode estar associado ao aumento do treino, mas os blocos de validação e a variância dos alvos também mudam; não atribuir o padrão a uma única causa.
 
 ### Interpretação das métricas
 
 - **MAE:** erro absoluto médio, na escala da TDS.
-- **RMSE:** erro quadrático médio em raiz, também na escala da TDS e mais sensível a erros grandes.
-- **R²:** desempenho relativo a uma previsão de referência baseada na média; não é acurácia nem significa “percentual de previsões corretas”.
+- **RMSE:** erro quadrático médio em raiz, na escala da TDS e mais sensível a erros grandes.
+- **R²:** desempenho relativo à previsão pela média; não é acurácia. Valores negativos significam desempenho inferior a essa referência.
 
-Os valores dos folds diferem. A melhora do MAE ao longo dos folds pode estar relacionada ao aumento do conjunto de treino, mas também há mudança nos intervalos de tamanho e nas distribuições avaliadas. Não atribuir a variação a uma única causa sem análise adicional.
+### Visuais recomendados
 
-## 9. Limitações, questões de ML e próximos passos — 2 min, mais discussão opcional
+1. MAE/RMSE por grafo e protocolo, com eixos e legendas explícitos.
+2. R² por fold junto das faixas de tamanho de treino e validação.
+3. Distribuição de TDS por grafo e por tamanho para contextualizar escalas e variâncias.
+4. Real versus previsto e resíduos para teste final e transferência, caso sejam usados os CSVs de previsões.
+
+## 10. Limitações, questões de ML e próximos passos — 3 min, mais discussão opcional
 
 ### Limitações atuais
 
@@ -234,7 +306,7 @@ Os valores dos folds diferem. A melhora do MAE ao longo dos folds pode estar rel
 2. A validação progressiva por tamanho é adequada para essa pergunta? O teste final deveria também reservar uma faixa inteira de tamanhos?
 3. Como lidar com candidatos que podem compartilhar vértices ou arestas? Faz sentido avaliar splits por grupos ou por grafo de origem?
 4. Quais baselines são necessários: média, regressão linear, Random Forest, outros modelos de boosting?
-5. Como avaliar a contribuição de `num_vertices` e das estatísticas de grau por ablação e importância de atributos?
+5. Como avaliar a contribuição de `num_vertices`, `num_edges`, `subgraph_size` e das estatísticas de grau por ablação e importância de atributos?
 6. Quais métricas refletem melhor o uso futuro do modelo na otimização, além de MAE, RMSE e R²?
 7. Como planejar experimentos com múltiplas sementes e grafos para medir robustez?
 
@@ -247,9 +319,29 @@ Os valores dos folds diferem. A melhora do MAE ao longo dos folds pode estar rel
 5. Repetir com múltiplas sementes e grafos.
 6. Avaliar a utilidade do modelo numa etapa concreta de busca do CSOP.
 
-## Referências aos artefatos do experimento
+### Perguntas prováveis e respostas que a apresentação deve cobrir
 
-- [Configuração do experimento](../experiments/runs/EXP_20261111_307605b45817/config/experiment.json)
-- [Métricas](../experiments/runs/EXP_20261111_307605b45817/evaluation/metrics.json)
-- [Metadados dos splits](../experiments/runs/EXP_20261111_307605b45817/datasets/split_metadata.json)
-- [Metadados do conjunto de dados](../experiments/runs/EXP_20261111_307605b45817/datasets/dataset.metadata.json)
+- **Por que regressão?** O alvo TDS é numérico e contínuo. Uma etapa futura pode usar previsões para ordenar candidatos.
+- **Por que TDS?** É a função objetivo atualmente implementada e permite validar o pipeline. O projeto pode receber outras funções objetivo.
+- **Como são gerados os rótulos?** Calculados diretamente pela contagem de triângulos no subgrafo, normalizada pelo número de vértices.
+- **O que significa cada feature?** Explicar grafo global, tamanho do candidato e estatísticas agregadas de grau; salientar que atributos globais são constantes dentro de cada grafo.
+- **Há risco de vazamento?** O conjunto de teste não deve participar da seleção do modelo ou hiperparâmetros. Também discutir dependência entre candidatos que podem compartilhar vértices/arestas.
+- **Por que o split random não basta?** Ele estima desempenho em amostras novas da mistura de tamanhos observada; não responde sobre tamanhos totalmente futuros nem grafos diferentes.
+- **O que mede o time series?** A ordem é por tamanho, não por tempo. Descrever como validação progressiva por tamanho.
+- **O teste no protocolo time_series é temporal?** Não. O experimento reserva 20% estratificados em todos os tamanhos e aplica folds progressivos nos 80% restantes. Se a pergunta exigir teste final só em tamanhos maiores, é preciso outro holdout por faixa de tamanho.
+- **Por que R² difere de MAE entre grafos?** R² é relativo à variância do alvo; MAE/RMSE dependem da escala. Mostrar distribuições de TDS e baselines por grafo.
+- **O modelo é rápido o suficiente?** Ainda não foi medido comparativamente. Medir extração de features e predição contra custo de calcular TDS antes de alegar benefício na busca.
+- **Por que não GNN?** O escopo atual prioriza modelos tabulares compactos e potencialmente rápidos. GNNs podem ser uma comparação futura se a informação topológica resumida pelas features for insuficiente.
+- **Como evitar sobreajuste ao ajustar hiperparâmetros?** Fazer qualquer seleção dentro dos dados de desenvolvimento e manter o teste intocado; considerar validação aninhada caso a busca seja extensa.
+
+## Orientações para geração dos slides
+
+Este planejamento será usado como entrada para uma ferramenta de geração de slides. Preservar valores e ressalvas; não inventar resultados nem tratar tamanho como tempo real. Distinguir claramente observações, interpretações possíveis e propostas futuras. Priorizar detalhes do pipeline e do processo de ML, com visuais para o fluxo, cada protocolo de split e os resultados. Evitar slides com parágrafos longos; usar notas de apoio para definições e ressalvas metodológicas.
+
+## Referências aos artefatos dos experimentos
+
+- Amazon, split random: [configuração](../experiments/runs/EXP_20261021_88cae057a82d/config/experiment.json), [métricas](../experiments/runs/EXP_20261021_88cae057a82d/evaluation/metrics.json), [splits](../experiments/runs/EXP_20261021_88cae057a82d/datasets/split_metadata.json).
+- Patents, split random: [configuração](../experiments/runs/EXP_20261112_70f000f9ad58/config/experiment.json), [métricas](../experiments/runs/EXP_20261112_70f000f9ad58/evaluation/metrics.json), [splits](../experiments/runs/EXP_20261112_70f000f9ad58/datasets/split_metadata.json).
+- Amazon, progressivo por tamanho: [configuração](../experiments/runs/EXP_20261111_307605b45817/config/experiment.json), [métricas](../experiments/runs/EXP_20261111_307605b45817/evaluation/metrics.json), [splits](../experiments/runs/EXP_20261111_307605b45817/datasets/split_metadata.json).
+- Patents, progressivo por tamanho: [configuração](../experiments/runs/EXP_20261113_8990d8ddf6e9/config/experiment.json), [métricas](../experiments/runs/EXP_20261113_8990d8ddf6e9/evaluation/metrics.json), [splits](../experiments/runs/EXP_20261113_8990d8ddf6e9/datasets/split_metadata.json).
+- Amazon → Patents, graph transfer: [configuração](../experiments/runs/EXP_20261104_183446919fe2/config/experiment.json), [métricas](../experiments/runs/EXP_20261104_183446919fe2/evaluation/metrics.json), [splits](../experiments/runs/EXP_20261104_183446919fe2/datasets/split_metadata.json).
